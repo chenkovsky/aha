@@ -1,0 +1,9 @@
+name: aha
+version: 0.1.0
+
+authors:
+  - chenkovsky <chenkovsky@qq.com>
+
+crystal: 0.23.1
+
+license: MIT
