@@ -6,6 +6,8 @@ class Aha
     @end : Int32
     @value : Int32
 
+    getter :start, :end, :value
+
     def initialize(@start, @end, @value)
     end
   end
@@ -24,13 +26,13 @@ class Aha
   @fails : Array(Int32)
   getter :da
 
-  def self.compile(keys : Array(String))
+  def self.compile(keys : Array(String)) : Aha
     da = Cedar.new
     keys.each { |key| da.insert key }
     self.compile da
   end
 
-  def self.compile(da : Cedar)
+  def self.compile(da : Cedar) : Aha
     nlen = da.array.size
     fails = Array(Int32).new(nlen, -1)
     output = Array(OutNode).new(nlen, OutNode.new(-1, -1))
@@ -88,17 +90,21 @@ class Aha
     end
   end
 
-  def match(str : String, &block)
-    match str.bytes, &block
+  def match(str : String)
+    # match str.bytes, &block
+    match str.bytes do |hit|
+      yield hit
+    end
   end
 
   def match(seq : Bytes | Array(UInt8), &block)
     match_ seq do |idx, nid|
-      e = nid
-      while @output[e].value >= 0
-        val = e.value, len = @da.key_len e.value
+      e = @output.to_unsafe + nid
+      while e.value.value >= 0
+        val = e.value.value
+        len = @da.key_len e.value.value
         yield Hit.new(idx - len + 1, idx + 1, val)
-        e = @output[e].next
+        e = @output.to_unsafe + e.value.next
       end
     end
   end

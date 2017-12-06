@@ -210,8 +210,8 @@ class Aha
     #   head_in : 原来block的头部指针
     #   head
     private def transfer_block(bi : Int32, head_in : Pointer(Int32), head_out : Pointer(Int32))
-      pop_block bi, head_in, head_in.value == 0 # 当一个双向列表的next是自己时，说明列表中只有一个元素了
-      push_block bi, head_out, head_out.value == 0
+      pop_block bi, head_in, bi == pointer(@blocks, bi).value.next # 当一个双向列表的next是自己时，说明列表中只有一个元素了
+      push_block bi, head_out, head_out.value == 0 && pointer(@blocks, bi).value.num != 0
     end
 
     # 找到一个空的节点，返回节点 id
@@ -348,8 +348,13 @@ class Aha
       return if parent_ptr.value.child_num == 0
       base = parent_ptr.value.base
       s = parent_ptr.value.child
-      (0...parent_ptr.value.child_num).each do
-        yield NodeDesc.new(base ^ s.to_i32, s)
+      if s == 0 && base > 0
+        s = pointer(@array, s).value.sibling
+      end
+      while s != 0
+        to = base ^ s.to_i32
+        break if to < 0
+        yield NodeDesc.new(to, s)
         s = pointer(@array, s).value.sibling
       end
     end
@@ -362,22 +367,23 @@ class Aha
       return req
     end
 
-    private def children(from : Int32, label : UInt8, append_label : Bool) : Array(UInt8)
+    private def set_child(base : Int32, c : UInt8, label : UInt8, append_label : Bool) : Array(UInt8)
       children = Array(UInt8).new(257)
-      parent_ptr = pointer @array, from
-      base = parent_ptr.value.base
-      s = parent_ptr.value.child
-      last_idx = 0
-      (0...parent_ptr.value.child_num).each do |idx|
-        break if s >= label
-        children << s
-        s = pointer(@array, s).value.sibling
-        last_idx = idx
+      if label == 0
+        children << c
+        c = pointer(@array, base ^ c.to_i32).value.sibling
+      end
+
+      if @ordered
+        while c != 0 && c <= label
+          children << c
+          c = pointer(@array, base ^ c.to_i32).value.sibling
+        end
       end
       children << label if append_label
-      (last_idx...parent_ptr.value.child_num).each do |idx|
-        children << s
-        s = pointer(@array, s).value.sibling
+      while c != 0
+        children << c
+        c = pointer(@array, base ^ c.to_i32).value.sibling
       end
       return children
     end
@@ -448,9 +454,9 @@ class Aha
       flag = consult from_n_ptr, from_p_ptr
       # 赶走child少的节点
       if flag
-        children = children base_n, label_n, true
+        children = set_child base_n, from_n_ptr.value.child, label_n, true
       else
-        children = children base_p, 255_u8, false
+        children = set_child base_p, from_p_ptr.value.child, 255_u8, false
       end
       # 给被踢的children找好位置
       base = children.size == 1 ? find_place : find_places(children)
@@ -472,22 +478,27 @@ class Aha
       children.each_with_index do |chl, i|
         to = pop_enode base, chl, from # 新的位置
         to_ = base_ ^ chl.to_i32       # 原来的位置
-        to_ptr = pointer @array, to
+        n = pointer @array, to
         if i == children.size - 1
-          to_ptr.value.sibling = 0_u8
+          n.value.sibling = 0_u8
         else
-          to_ptr.value.sibling = children[i + 1]
+          n.value.sibling = children[i + 1]
         end
         next if flag && to_ == to_pn # 这个节点没有子节点不需要下面的操作
-        n = pointer @array, to
         n_ = pointer @array, to_
         n.value.value = n_.value.value
         n.value.flags = n_.value.flags
-        if chl != 0
-          childs(to_) do |ni|
-            chl, label_ = ni.id, ni.label
-            # 更新孙子节点的父节点信息
-            pointer(@array, chl).value.check = to
+        if n.value.value < 0 && chl != 0
+          # 更新孙子节点的父节点信息
+          c = pointer(@array, to_).value.child
+          pointer(@array, to).value.child = c
+          ptr = pointer(@array, n.value.base ^ c.to_i32)
+          ptr.value.check = to
+          c = ptr.value.sibling
+          while c != 0
+            ptr = pointer(@array, n.value.base ^ c.to_i32)
+            ptr.value.check = to
+            c = ptr.value.sibling
           end
         end
         from_n = to if !flag && to_ == from_n
