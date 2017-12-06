@@ -45,7 +45,7 @@ class Aha
       e = q.shift
       nid = e.id
       if da.is_end? nid
-        vk = da.vkey nid
+        vk = da.value nid
         output[nid].value = vk
       end
       da.childs nid do |c|
@@ -89,10 +89,10 @@ class Aha
   end
 
   def match(str : String, &block)
-    match str.bytes, block
+    match str.bytes, &block
   end
 
-  def match(seq : Bytes | Array(UInt8))
+  def match(seq : Bytes | Array(UInt8), &block)
     match_ seq do |idx, nid|
       e = nid
       while @output[e].value >= 0

@@ -2,37 +2,63 @@ class Aha
   class Cedar
     VALUE_LIMIT = (1 << 31) - 1
 
+    struct NodeDesc
+      @id : Int32
+      @label : UInt8
+      getter :id, :label
+
+      def initialize(@id, @label)
+      end
+    end
+
     struct Node
       @value : Int32
       @check : Int32
+      @sibling : UInt8
+      @child : UInt8
+      @flags : UInt16 # 低九位表示孩子数目
 
-      property :value, :check
+      protected property :value, :check, :sibling, :child, :flags
 
       def initialize(@value, @check)
+        @flags = 0_u16
+        @child = 0_u8
+        @sibling = 0_u8
+      end
+
+      CHILD_NUM_MASK = (1 << 9) - 1
+      END_MASK       = 1 << 9
+
+      def child_num
+        @flags & CHILD_NUM_MASK
+      end
+
+      def child_num=(val)
+        @flags = (@flags & ~CHILD_NUM_MASK) | val
+      end
+
+      def end? : Bool
+        (@flags & END_MASK) != 0
+      end
+
+      def end!
+        @flags |= END_MASK
       end
 
       def base
         -(@value + 1)
       end
-    end
 
-    struct NodeDesc
-      @label : UInt8
-      @id : Int32
-
-      property :label, :id
-
-      def initialize(@label, @id)
+      def is_child?(par)
+        @check = par
       end
-    end
 
-    struct NodeInfo
-      @sibling : UInt8
-      @child : UInt8
-      @end : Bool
-      property :child, :sibling, :end
+      def child_ptr
+        pointerof(@child)
+      end
 
-      def initialize(@sibling, @child, @end)
+      def sibling_ptr
+        pointerof(@sibling)
       end
     end
 
@@ -51,7 +77,6 @@ class Aha
     end
 
     @array : Array(Node)
-    @infos : Array(NodeInfo)
     @blocks : Array(Block)
     @key_lens : Array(Int32)
     @reject : Array(Int32)
@@ -68,14 +93,14 @@ class Aha
       capacity = 256
       @key_lens = Array(Int32).new
       @array = Array(Node).new(capacity)
-      @infos = Array(NodeInfo).new(capacity)
       @blocks = Array(Block).new
       @size = capacity
       @max_trial = 1
-      @array << Node.new(-2, 0)
+      @array << Node.new(-1, -1)
+      # array 第一个节点空置
       (1...256).each { |i| @array << Node.new(-(i - 1), -(i + 1)) }
-      @array[1].value = -255
-      @array[255].check = -1
+      pointer(@array, 1).value.value = -255
+      pointer(@array, 255).value.check = -1
       @blocks << Block.new(0, 0, 0, 1)
       @reject = (0..256).map { |i| i + 1 }
       @bheadF = 0
@@ -87,50 +112,62 @@ class Aha
       @key_lens[key]
     end
 
+    private macro pointer(arr, idx)
+      ({{arr}}.to_unsafe + ({{idx}}))
+    end
+
     # 从 key 的 start 位开始, 从 from 节点开始遍历，如果没有节点就创建节点, 返回最终的叶子节点
     private def get(key : Bytes | Array(UInt8), from : Int32, start : Int32) : Int32
+      from_ptr = pointer(@array, from)
       (start...key.size).each do |pos|
-        value = @array[from].value
+        value = from_ptr.value.value
         if value >= 0 && value != VALUE_LIMIT
-          # 每个节点的都添加一个label=0的子节点
-          # 这个子节点的, label = 0 表示完整的匹配
-          # 人为增加一个叶子节点
+          # 原本这个节点是叶子节点，值就存储在base里面，现在不是叶子节点了。
+          # 所以需要新建一个叶子节点。
+          # 其实完全可以一开始就新建\0 节点，现在这么做是为了节省空间
           to = follow(from, 0_u8)
-          @array[to].value = value
+          pointer(@array, to).value.value = value
         end
         from = follow(from, key[pos])
+        from_ptr = pointer @array, from
       end
       # value < 0 时 base >= 0, 说明不是叶子节点
       # value >= 0 时 base < 0, 说明是叶子节点
-      @array[from].value < 0 ? follow(from, 0_u8) : from
+      from_ptr.value.value < 0 ? follow(from, 0_u8) : from
     end
 
     # 从 from 开始，如果没有label的子节点，那么创建，返回子节点的id
     private def follow(from : Int32, label : UInt8) : Int32
-      base = @array[from].base
-      to = base ^ label
-      if base < 0 || @array[to].check < 0
+      from_ptr = pointer @array, from
+      base = from_ptr.value.base
+      to = base ^ label.to_i32
+      to_ptr = pointer @array, to
+      if base < 0 || to_ptr.value.check < 0
         # 当前节点没有子节点 || 需要存放的地方没有被占用。
         # has_child 当前节点是否还有其他节点
-        has_child = base >= 0 && @array[base ^ @infos[from].child.to_i32].check == from
+        has_child = from_ptr.value.child_num > 0
         to = pop_enode base, label, from
         # 添加当前的子节点
-        push_sibling from, to ^ label.to_i32, label, has_child
-      elsif @array[to].check != from
+        push_sibling from, label
+      elsif to_ptr.value.check != from
         # 需要存放的地方已经被占用了
         to = resolve from, base, label
       end
       to
     end
 
-    # 将 block bi 从双向列表中拿出
+    # 将 block bi 从双向链表中拿出
+    # params:
+    #   bi 当前 block 的 id
+    #   head_in 当前 block 链表的头部指针
+    #   last 当前block 是否是列表中最后一个block
     private def pop_block(bi : Int32, head_in : Pointer(Int32), last : Bool) : Void
       if last
         head_in.value = 0
       else
-        b = @blocks.to_unsafe + bi
-        @blocks[b.value.prev].next = b.value.next
-        @blocks[b.value.next].prev = b.value.prev
+        b = pointer @blocks, bi
+        pointer(@blocks, b.value.prev).value.next = b.value.next
+        pointer(@blocks, b.value.next).value.prev = b.value.prev
         if bi == head_in.value
           # 如果双向列表的头 是 bi 那么应该将头设为bi的next
           head_in.value = b.value.next
@@ -139,45 +176,54 @@ class Aha
     end
 
     # 将 bi 放入双向列表
+    # params:
+    #   bi 当前block的id
+    #   head_out 目标block链表的头部
+    #   empty headout链表是否为空
     private def push_block(bi : Int32, head_out : Pointer(Int32), empty : Bool) : Void
-      b = @blocks.to_unsafe + bi
+      b = pointer @blocks, bi
       if empty
         head_out.value, b.value.prev, b.value.next = bi, bi, bi
       else
-        tail_out = @blocks.to_unsafe + head_out.value
+        tail_out = pointer @blocks, head_out.value
         b.value.prev = tail_out.value.prev
         b.value.next = head_out.value
-        head_out.value, tail_out.value.prev, @blocks[tail_out.value.prev].next = bi, bi, bi
+        pointer(@blocks, tail_out.value.prev).value.next = bi
+        head_out.value, tail_out.value.prev = bi, bi
       end
     end
 
     # 增加一个可用的block, 返回 block 的 id
     private def add_block : Int32
       @blocks << Block.new(0, 0, 0, @size)
-      @array << Node.new(-(@size + 255), -(@size + 1))
-      ((@size + 1)...(@size + 255)).each do |i|
-        @array << Node.new(-(i - 1), -(i + 1))
+      (0...256).each do |i|
+        @array << Node.new(-(((i + 255) & 255) + @size), -(((i + 1) & 255) + @size))
       end
-      @array << Node.new(-(@size + 254), -@size)
       push_block @size >> 8, pointerof(@bheadO), @bheadO == 0
       @size += 256
-      @size >> 8 - 1
+      (@size >> 8) - 1
     end
 
     # 将 block 放入另一个队列
+    # params:
+    #   bi : 当前block id
+    #   head_in : 原来block的头部指针
+    #   head
     private def transfer_block(bi : Int32, head_in : Pointer(Int32), head_out : Pointer(Int32))
-      pop_block bi, head_in, bi == @blocks[bi].next
-      push_block bi, head_out, head_out.value == 0 && @blocks[bi].num != 0
+      pop_block bi, head_in, head_in.value == 0 # 当一个双向列表的next是自己时，说明列表中只有一个元素了
+      push_block bi, head_out, head_out.value == 0
     end
 
     # 找到一个空的节点，返回节点 id
     # from 为 父节点， base 为该父节点的 base
+    # 如果 from 未曾有过子节点，那么给 from 设置一下 base
+    # 设置好了子节点的check
     private def pop_enode(base : Int32, label : UInt8, from : Int32) : Int32
-      e = base ^ label
-      e = find_place if base < 0 # 如果还没有任何子节点，给其找个位置
+      from_ptr = pointer @array, from
+      e = base < 0 ? find_place : (base ^ label) # 如果还没有任何子节点，给其找个位置
       bi = e >> 8
-      n = @array.to_unsafe + e
-      b = @blocks.to_unsafe + bi
+      n = pointer @array, e
+      b = pointer @blocks, bi
       b.value.num -= 1 # 该block中剩余的slot数目减少
       if b.value.num == 0
         # O 队列 > 1 个 slot
@@ -189,8 +235,8 @@ class Aha
         # 所有的 slot 其实在未分配的时候也是用 双向列表在管理
         # 此时从双向列表中移除这个slot
         # check 和 value 分别是 prev 和 next
-        @array[-n.value.value].check = n.value.check
-        @array[-n.value.check].value = n.value.value
+        pointer(@array, -n.value.value).value.check = n.value.check
+        pointer(@array, -n.value.check).value.value = n.value.value
         if e == b.value.ehead
           b.value.ehead = -n.value.check
         end
@@ -201,27 +247,31 @@ class Aha
       end
       n.value.value = VALUE_LIMIT
       n.value.check = from
-      @array[from].value = -(e ^ label) - 1 if base < 0
+      from_ptr.value.value = -(e ^ label.to_i32) - 1 if base < 0
       e
     end
 
     private def push_enode(e : Int32)
+      e_ptr = pointer @array, e
       bi = e >> 8
-      b = @blocks.to_unsafe + bi
+      b = pointer @blocks, bi
       b.value.num += 1
       if b.value.num == 1
         # 如果 block 中原来没有slot。现在有了
         # 从 F 链 放入 C 链
         b.value.ehead = e
-        @array[e] = Node.new(-e, -e)
+        e_ptr.value.value = -e
+        e_ptr.value.check = -e
         transfer_block bi, pointerof(@bheadF), pointerof(@bheadC) unless bi == 0
       else
         # 原本就有， 首先放入队列
         prev = b.value.ehead
-        next_ = -@array[prev].check
-        @array[e] = Node.new(-prev, -next_)
-        @array[prev].check = -e
-        @array[next_].value = -e
+        prev_ptr = pointer @array, prev
+        next_ = -prev_ptr.value.check
+        e_ptr.value.value = -prev
+        e_ptr.value.check = -next_
+        prev_ptr.value.check = -e
+        pointer(@array, next_).value.value = -e
         if b.value.num == 2 || b.value.trial == @max_trial
           # 如果刚好达到两个，那么就需要从, C 队列，放入 O 队列
           transfer_block bi, pointerof(@bheadC), pointerof(@bheadO) unless bi == 0
@@ -232,74 +282,75 @@ class Aha
       if b.value.reject < @reject[b.value.num]
         b.value.reject = @reject[b.value.num]
       end
+
       # 清空 node 信息
-      @infos[e] = NodeInfo.new(0_u8, 0_u8, false)
+      e_ptr.value.child = 0_u8
+      e_ptr.value.sibling = 0_u8
+      e_ptr.value.flags = 0_u16
     end
 
-    # 将 label 作为子节点， 在已经分配好空间的情况下，调用次函数
-    private def push_sibling(from : Int32, base : Int32, label : UInt8, has_child : Bool)
-      c = @infos.to_unsafe + from
-      keep_order = c.value.child == 0
-      if @ordered
-        keep_order = label > c.value.child
-      end
-      if has_child && keep_order
-        c = @infos.to_unsafe + (base ^ c.value.sibling.to_i32)
-        while @ordered && c.value.sibling != 0 && c.value.sibling < label
-          c = @infos.to_unsafe + (base ^ c.value.sibling.to_i32)
+    # 将 label 加入子节点的链表， 在已经分配好空间的情况下，调用此函数
+    # params:
+    #   from 父节点id
+    #   label 当前节点 label
+    private def push_sibling(from : Int32, label : UInt8)
+      from_ptr = pointer @array, from
+      child_ptr = from_ptr.value.child_ptr
+      base = from_ptr.value.base
+      child_num = from_ptr.value.child_num
+      if @ordered && child_num > 0 && label > child_ptr.value
+        child_ptr = pointer(@array, (base ^ child_ptr.value.to_i32)).value.sibling_ptr
+        idx = 1
+        while idx < child_num && child_ptr.value < label
+          child_ptr = pointer(@array, (base ^ child_ptr.value.to_i32)).value.sibling_ptr
+          idx += 1
         end
       end
       # 加入 sibling 的链表
-      @infos[base ^ label.to_i32].sibling = c.value.sibling
-      c.value.sibling = label
+      pointer(@array, (base ^ label.to_i32)).value.sibling = child_ptr.value
+      child_ptr.value = label
+      from_ptr.value.child_num += 1
     end
 
     # 将 label 节点从 sibling 链表移出
-    private def pop_sibling(from : Int32, base : Int32, label : UInt8)
-      c = pointerof(@infos[from].child)
-      while c.value != label
-        c = pointerof(@infos[base ^ c.value.to_i32]).sibling
+    private def pop_sibling(from : Int32, label : UInt8)
+      from_ptr = pointer @array, from
+      child_ptr = from_ptr.value.child_ptr
+      while child_ptr.value != label
+        child = pointer(@array, (base ^ child_ptr.value.to_i32)).value.sibling_ptr
       end
-      c.value = @infos[base ^ c.value.to_i32].sibling
+      child.value = pointer(@array, (base ^ c.value.to_i32)).value.sibling
+      from_ptr.value.child_num -= 1
     end
 
-    # cp 是否比 cn sibling 多
-    private def consult(basen : Int32, basep : Int32, cn : UInt8, cp : UInt8) : Bool
-      cn = @infos[basen ^ cn.to_i32].sibling
-      cp = @infos[basep ^ cp.to_i32].sibling
-      while cn != 0 && cp != 0
-        cn = @infos[basen ^ cn.to_i32].sibling
-        cp = @infos[basep ^ cp.to_i32].sibling
-      end
-      cp != 0
+    # 是否保留 pnode
+    private def consult(nref : Pointer(Node), pref : Pointer(Node)) : Bool
+      nref.value.child_num < pref.value.child_num
     end
 
     def has_label?(id : Int32, label : UInt8) : Bool
       child(id, label) >= 0
     end
 
-    # 返回 node 的 id
+    # 返回 子节点 的 id
     def child(id : Int32, label : UInt8) : Int32 # < 0 说明不存在
-      base = @array[id].base
+      parent_ptr = pointer @array, id
+      return -1 if parent_ptr.value.child_num == 0
+      base = parent_ptr.value.base
       cid = base ^ label.to_i32
-      if cid < 0 || cid >= @size || @array[cid].check != id
-        return -1
-      end
+      return -1 if cid >= @size || !pointer(@array, cid).value.is_child?(id)
       return cid
     end
 
-    # yield 所有子节点的NodeDesc
-    def childs(id : Int32)
-      base = @array[id].base
-      s = @infos[id].child
-      if s == 0 && base > 0
-        s = @infos[base].sibling
-      end
-      while s != 0
-        to = base ^ s.to_i32
-        break if to < 0
-        yield NodeDesc.new(id: to, label: s)
-        s = @infos[to].sibling
+    # yield 所有子节点的 id, label
+    def childs(id : Int32, &block)
+      parent_ptr = pointer @array, id
+      return if parent_ptr.value.child_num == 0
+      base = parent_ptr.value.base
+      s = parent_ptr.value.child
+      (0...parent_ptr.value.child_num).each do
+        yield NodeDesc.new(base ^ s.to_i32, s)
+        s = pointer(@array, s).value.sibling
       end
     end
 
@@ -311,29 +362,24 @@ class Aha
       return req
     end
 
-    # c 是 base的第一个child
-    # label 是需要加入的child
-    # 返回所有child的label的数组
-    private def set_child(base : Int32, c : UInt8, label : UInt8, flag : Bool) : Array(UInt8)
-      child = Array(UInt8).new(257)
-      if c == 0
-        child << c
-        c = @infos[base ^ c.to_i32].sibling
+    private def children(from : Int32, label : UInt8, append_label : Bool) : Array(UInt8)
+      children = Array(UInt8).new(257)
+      parent_ptr = pointer @array, from
+      base = parent_ptr.value.base
+      s = parent_ptr.value.child
+      last_idx = 0
+      (0...parent_ptr.value.child_num).each do |idx|
+        break if s >= label
+        children << s
+        s = pointer(@array, s).value.sibling
+        last_idx = idx
       end
-      if @ordered
-        while c != 0 && c <= label
-          child << c
-          c = @infos[base ^ c.to_i32].sibling
-        end
+      children << label if append_label
+      (last_idx...parent_ptr.value.child_num).each do |idx|
+        children << s
+        s = pointer(@array, s).value.sibling
       end
-      if flag
-        child << label
-      end
-      while c != 0
-        child << c
-        c = @infos[base ^ c.to_i32].sibling
-      end
-      child
+      return children
     end
 
     # 找一个位置
@@ -347,10 +393,10 @@ class Aha
     def find_places(child : Array(UInt8)) : Int32
       bi = @bheadO
       if bi != 0
-        bz = @blocks[@bheadO].prev
+        bz = pointer(@blocks, @bheadO).value.prev
         nc = child.size
         while true
-          b = @blocks.to_unsafe + bi
+          b = pointer @blocks, bi
           if b.value.num >= nc && nc < b.value.reject
             # 当前的block是合法的block
             e = b.value.ehead
@@ -358,7 +404,7 @@ class Aha
               base = e ^ child[0].to_i32
               i = 0
               child.each_with_index do |c, i|
-                break if @array[base ^ c.to_i32].check < 0
+                break unless pointer(@array, (base ^ c.to_i32)).value.check < 0
                 if i == child.size - 1
                   # 每个子节点都能插入，就这个block了。
                   # ehead 是，
@@ -367,8 +413,9 @@ class Aha
                 end
               end
               # 因为空闲的 slot 是链表管理的，check直接就是下一个slot 了
-              e = -@array[e].check
+              e = -pointer(@array, e).value.check
               if e == b.value.ehead
+                # 已经找过一遍了
                 break
               end
             end
@@ -394,58 +441,61 @@ class Aha
 
     private def resolve(from_n : Int32, base_n : Int32, label_n : UInt8) : Int32
       to_pn = base_n ^ label_n.to_i32
-      from_p = @array[to_pn].check
-      base_p = @array[from_p].base
-      flag = consult base_n, base_p, @infos[from_n].child, @infos[from_p].child
+      from_p = pointer(@array, to_pn).value.check
+      from_p_ptr = pointer @array, from_p
+      from_n_ptr = pointer @array, from_n
+      base_p = pointer(@array, from_p).value.base
+      flag = consult from_n_ptr, from_p_ptr
       # 赶走child少的节点
       if flag
-        children = set_child base_n, @infos[from_n].child, label_n, true
+        children = children base_n, label_n, true
       else
-        children = set_child base_p, @infos[from_p].child, 255_u8, false
+        children = children base_p, 255_u8, false
       end
       # 给被踢的children找好位置
       base = children.size == 1 ? find_place : find_places(children)
       base ^= children[0].to_i32
       if flag
         from = from_n
+        from_ptr = from_n_ptr
         base_ = base_n
       else
         from = from_p
+        from_ptr = from_p_ptr
         base_ = base_p
       end
       if flag && children[0] == label_n
-        @infos[from].child = label_n
+        from_ptr.value.child = label_n
       end
-      @array[from].value = -base - 1
+      from_ptr.value.value = -base - 1
       # 任意被赶走的重新安置 child
       children.each_with_index do |chl, i|
         to = pop_enode base, chl, from # 新的位置
         to_ = base_ ^ chl.to_i32       # 原来的位置
+        to_ptr = pointer @array, to
         if i == children.size - 1
-          @infos[to].sibling = 0_u8
+          to_ptr.value.sibling = 0_u8
         else
-          @infos[to].sibling = children[i + 1]
+          to_ptr.value.sibling = children[i + 1]
         end
         next if flag && to_ == to_pn # 这个节点没有子节点不需要下面的操作
-        n = @array.to_unsafe + to
-        n_ = @array.to_unsafe + to_
+        n = pointer @array, to
+        n_ = pointer @array, to_
         n.value.value = n_.value.value
-        if n.value.value < 0 && chl != 0
-          # 这个节点有子节点，需要修改check
-          c = @infos[to_].child
-          @infos[to].child = c
-          @array[n.value.base ^ c.to_i32].check = to
-          c = @infos[n.value.base ^ c.to_i32].sibling
-          while c != 0
-            @array[n.value.base ^ c.to_i32].check = to
-            c = @infos[n.value.base ^ c.to_i32].sibling
+        n.value.flags = n_.value.flags
+        if chl != 0
+          childs(to_) do |ni|
+            chl, label_ = ni.id, ni.label
+            # 更新孙子节点的父节点信息
+            pointer(@array, chl).value.check = to
           end
         end
         from_n = to if !flag && to_ == from_n
         if !flag && to_ == to_pn
           # 雀巢鸠占
-          push_sibling from_n, to_pn ^ label_n.to_i32, label_n, true
-          @infos[to_].child = 0_u8
+          push_sibling from_n, label_n
+          to_ptr_ = pointer @array, to_
+          to_ptr_.value.child = 0_u8
           n_.value.value = VALUE_LIMIT
           n_.value.check = from_n
         else
@@ -457,15 +507,16 @@ class Aha
     end
 
     def is_end?(id : Int32) : Bool
-      return true if @infos[id].end
-      @infos[id].child == 0
+      return true if pointer(@array, id).value.end?
+      pointer(@array, id).value.child == 0
     end
 
-    def status
-      @array.each_with_index do |n, i|
-        nodes = 0
-        keys = 0
-        if n.check >= 0
+    protected def status
+      nodes = 0
+      keys = 0
+      (0...@array.size).each do |i|
+        node_ptr = pointer @array, i
+        if n.value.occupy?
           nodes += 1
           if n.value >= 0
             keys += 1
@@ -477,9 +528,10 @@ class Aha
 
     # jumpe 返回节点id
     private def jump(byte : UInt8, from : Int32) : Int32
-      return -1 if @array[from].value >= 0
-      to = @array[from].base ^ byte.to_i32
-      if @array[to].check != from
+      from_ptr = pointer @array, from
+      return -1 if from_ptr.value.value >= 0
+      to = from_ptr.value.base ^ byte.to_i32
+      if pointer(@array, to).value.check != from
         return -1
       end
       return to
@@ -497,9 +549,9 @@ class Aha
     private def key(id : Int32) : Array(Byte)
       bytes = Array(UInt8).new
       while id > 0
-        from = @array[id].check
+        from = pointer(@array, id).value.check
         raise "no path" if from < 0
-        chr = @array[from].base ^ id
+        chr = pointer(@array, from).value.base ^ id
         if chr != 0
           key << chr
         end
@@ -510,11 +562,13 @@ class Aha
     end
 
     # 返回 这个节点的value值，已占用节点的value值就是key的idx
-    protected def vkey(id) : Int32
-      val = @array[id].value
+    protected def value(id) : Int32
+      ptr = pointer @array, id
+      val = ptr.value.value
       return val if val >= 0
-      to = @array[id].base
-      return @array[to].value if @array[to].check == id && @array[to].value >= 0
+      to = ptr.value.base
+      to_ptr = pointer @array, to
+      return to_ptr.value.value if to_ptr.value.check == id && to_ptr.value.value >= 0
       raise "no value"
     end
 
@@ -525,8 +579,9 @@ class Aha
     def insert(key : Bytes | Array(UInt8)) : Int32
       p = get key, 0, 0 # 创建节点
       id = @key_lens.size
-      @array[p].value = id # 设置 id
-      @infos[p].end = true
+      p_ptr = @array.to_unsafe + p
+      p_ptr.value.value = id # 设置 id
+      p_ptr.value.end!
       @key_lens << key.size
       return id
     end
@@ -535,17 +590,20 @@ class Aha
     def delete(key : Bytes | Array(UInt8)) : Int32
       to = jump key, 0
       return -1 if to < 0
-      if @array[to].value < 0
-        base = @array[to].base
-        if @array[base].check == to
+      to_ptr = pointer @array, to
+      if to_ptr.value < 0
+        base = to_ptr.base
+        if pointer(@array, base).value.check == to
           to = base
         end
       end
       while true
-        from = @array[to].check
-        base = @array[from].base
+        to_ptr = pointer @array, to
+        from_ptr = pointer @array, from
+        from = to_ptr.value.check
+        base = from_ptr.value.base
         label = (to ^ base).to_u8
-        if @infos[to].sibling != 0 || @infos[from].child != label
+        if to_ptr.value.sibling != 0 || from_ptr.value.child != label
           pop_sibling from, base, label
           push_encode to
           break
@@ -601,25 +659,29 @@ class Aha
 
     # 返回终止节点
     private def begin(from : Int32) : Int32
-      c = @infos[from].child
+      from_ptr = pointer @array, from
+      c = from_ptr.value.child
       while c != 0
-        to = @array[from].base ^ c.to_i32
-        c = @infos[to].child
+        to = from_ptr.value.base ^ c.to_i32
+        c = pointer(@array, to).value.child
         from = to
+        from_ptr = pointer @array, from
       end
-      return @array[from].base if @array[from].base > 0
+      return from_ptr.value.base if from_ptr.value.base > 0
       return from
     end
 
     # 尝试寻找兄弟节点，父节点的兄弟节点，
     private def next(from : Int32, root : Int32)
-      c = @infos[from].sibling
-      while c == 0 && from != root && @array[from].check >= 0
-        from = @array[from].check
-        c = @infos[from].sibling
+      from_ptr = pointer @array, from
+      c = from_ptr.value.sibling
+      while c == 0 && from != root && from_ptr.value.check >= 0
+        from = from_ptr.value.check
+        c = from_ptr.value.sibling
+        from_ptr = pointer @array, from
       end
       return -1 if from == root
-      from = @array[@array[from].check].base ^ c.to_i32
+      from = pointer(@array, from_ptr.value.check).value.base ^ c.to_i32
       return self.begin(from)
     end
   end
