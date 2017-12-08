@@ -116,11 +116,14 @@ class Aha
       ({{arr}}.to_unsafe + ({{idx}}))
     end
 
+    private macro at(arr, idx)
+      pointer({{arr}}, {{idx}}).value
+    end
+
     # 从 key 的 start 位开始, 从 from 节点开始遍历，如果没有节点就创建节点, 返回最终的叶子节点
     private def get(key : Bytes | Array(UInt8), from : Int32, start : Int32) : Int32
-      from_ptr = pointer(@array, from)
       (start...key.size).each do |pos|
-        value = from_ptr.value.value
+        value = at(@array, from).value
         if value >= 0 && value != VALUE_LIMIT
           # 原本这个节点是叶子节点，值就存储在base里面，现在不是叶子节点了。
           # 所以需要新建一个叶子节点。
@@ -129,27 +132,24 @@ class Aha
           pointer(@array, to).value.value = value
         end
         from = follow(from, key[pos])
-        from_ptr = pointer @array, from
       end
       # value < 0 时 base >= 0, 说明不是叶子节点
       # value >= 0 时 base < 0, 说明是叶子节点
-      from_ptr.value.value < 0 ? follow(from, 0_u8) : from
+      at(@array, from).value < 0 ? follow(from, 0_u8) : from
     end
 
     # 从 from 开始，如果没有label的子节点，那么创建，返回子节点的id
     private def follow(from : Int32, label : UInt8) : Int32
-      from_ptr = pointer @array, from
-      base = from_ptr.value.base
+      base = at(@array, from).base
       to = base ^ label.to_i32
-      to_ptr = pointer @array, to
-      if base < 0 || to_ptr.value.check < 0
+      if base < 0 || at(@array, to).check < 0
         # 当前节点没有子节点 || 需要存放的地方没有被占用。
         # has_child 当前节点是否还有其他节点
-        has_child = from_ptr.value.child_num > 0
+        has_child = at(@array, from).child_num > 0
         to = pop_enode base, label, from
         # 添加当前的子节点
         push_sibling from, label
-      elsif to_ptr.value.check != from
+      elsif at(@array, to).check != from
         # 需要存放的地方已经被占用了
         to = resolve from, base, label
       end
@@ -219,7 +219,6 @@ class Aha
     # 如果 from 未曾有过子节点，那么给 from 设置一下 base
     # 设置好了子节点的check
     private def pop_enode(base : Int32, label : UInt8, from : Int32) : Int32
-      from_ptr = pointer @array, from
       e = base < 0 ? find_place : (base ^ label) # 如果还没有任何子节点，给其找个位置
       bi = e >> 8
       n = pointer @array, e
@@ -235,8 +234,8 @@ class Aha
         # 所有的 slot 其实在未分配的时候也是用 双向列表在管理
         # 此时从双向列表中移除这个slot
         # check 和 value 分别是 prev 和 next
-        pointer(@array, -n.value.value).value.check = n.value.check
-        pointer(@array, -n.value.check).value.value = n.value.value
+        at(@array, -n.value.value).check = n.value.check
+        at(@array, -n.value.check).value = n.value.value
         if e == b.value.ehead
           b.value.ehead = -n.value.check
         end
@@ -247,7 +246,7 @@ class Aha
       end
       n.value.value = VALUE_LIMIT
       n.value.check = from
-      from_ptr.value.value = -(e ^ label.to_i32) - 1 if base < 0
+      at(@array, from).value = -(e ^ label.to_i32) - 1 if base < 0
       e
     end
 
@@ -447,10 +446,10 @@ class Aha
 
     private def resolve(from_n : Int32, base_n : Int32, label_n : UInt8) : Int32
       to_pn = base_n ^ label_n.to_i32
-      from_p = pointer(@array, to_pn).value.check
+      from_p = at(@array, to_pn).check
       from_p_ptr = pointer @array, from_p
       from_n_ptr = pointer @array, from_n
-      base_p = pointer(@array, from_p).value.base
+      base_p = at(@array, from_p).base
       flag = consult from_n_ptr, from_p_ptr
       # 赶走child少的节点
       if flag
@@ -463,11 +462,11 @@ class Aha
       base ^= children[0].to_i32
       if flag
         from = from_n
-        from_ptr = from_n_ptr
+        from_ptr = pointer @array, from_n
         base_ = base_n
       else
         from = from_p
-        from_ptr = from_p_ptr
+        from_ptr = pointer @array, from_p
         base_ = base_p
       end
       if flag && children[0] == label_n
