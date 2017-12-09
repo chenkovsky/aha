@@ -7,7 +7,6 @@ class Aha
     end
 
     def to_dot(io)
-      end_ = "END"
       io.puts "digraph DFA {"
       io.puts "\tnode [color=lightblue2 style=filled]"
       (0...@array.size).each do |id|
@@ -18,11 +17,12 @@ class Aha
         io.puts <<-DOT
         "node(#{pid})" -> "node(#{id})" [label="(#{label.to_s(16)})" color=black]
         DOT
-        if at(@array, id).end?
+        sib = at(@array, id).sibling
+        sib_id = pbase ^ sib.to_i32
+        if at(@array, sib_id).check == pid
           io.puts <<-DOT
-          "#{end_}" -> "END(#{id})"
+          "node(#{id})" -> "node(#{sib_id})" [label="(#{sib.to_s(16)})" color=red]
           DOT
-          end_ = "END(#{id})"
         end
       end
       io.puts "}"

@@ -1,6 +1,8 @@
 require "./aha/*"
 
 class Aha
+  # 如果找不到子节点，每次都去fail节点查看有没有相对应的子节点。
+  # 相应的，如果找到了end节点，也需要将fail节点的out values加入
   struct Hit
     @start : Int32
     @end : Int32
@@ -24,7 +26,6 @@ class Aha
   @da : Cedar
   @output : Array(OutNode)
   @fails : Array(Int32)
-  getter :da
 
   def self.compile(keys : Array(String)) : Aha
     da = Cedar.new
@@ -39,18 +40,21 @@ class Aha
     q = Deque(Cedar::NodeDesc).new
     ro = 0
     fails[ro] = ro
-    da.childs(ro) do |c|
+    da.children(ro) do |c|
+      # 根节点的子节点，失败都返回根节点
       fails[c.id] = ro
       q << c
     end
     while !q.empty?
       e = q.shift
+      STDERR.puts e
       nid = e.id
       if da.is_end? nid
         vk = da.value nid
         output[nid].value = vk
       end
-      da.childs nid do |c|
+      da.children nid do |c|
+        STDERR.puts "child of: #{nid} = #{c}"
         q << c
         fid = nid
         while fid != ro
@@ -77,9 +81,10 @@ class Aha
     nid = 0
     seq.each_with_index do |b, i|
       while true
-        if @da.has_label? nid, b
-          nid = da.child nid, b
-          if da.is_end? nid
+        nid_ = @da.child nid, b
+        if nid_ >= 0
+          nid = nid_
+          if @da.is_end? nid
             yield i, nid
           end
           break

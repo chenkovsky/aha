@@ -99,8 +99,8 @@ class Aha
       @array << Node.new(-1, -1)
       # array 第一个节点空置
       (1...256).each { |i| @array << Node.new(-(i - 1), -(i + 1)) }
-      pointer(@array, 1).value.value = -255
-      pointer(@array, 255).value.check = -1
+      at(@array, 1).value = -255
+      at(@array, 255).check = -1
       @blocks << Block.new(0, 0, 0, 1)
       @reject = (0..256).map { |i| i + 1 }
       @bheadF = 0
@@ -117,7 +117,7 @@ class Aha
     end
 
     private macro at(arr, idx)
-      pointer({{arr}}, {{idx}}).value
+      (pointer({{arr}}, {{idx}}).value)
     end
 
     # 从 key 的 start 位开始, 从 from 节点开始遍历，如果没有节点就创建节点, 返回最终的叶子节点
@@ -129,7 +129,7 @@ class Aha
           # 所以需要新建一个叶子节点。
           # 其实完全可以一开始就新建\0 节点，现在这么做是为了节省空间
           to = follow(from, 0_u8)
-          pointer(@array, to).value.value = value
+          at(@array, to).value = value
         end
         from = follow(from, key[pos])
       end
@@ -145,10 +145,10 @@ class Aha
       if base < 0 || at(@array, to).check < 0
         # 当前节点没有子节点 || 需要存放的地方没有被占用。
         # has_child 当前节点是否还有其他节点
-        has_child = at(@array, from).child_num > 0
+        has_child = base >= 0 && (at(@array, base ^ at(@array, from).child).check == from)
         to = pop_enode base, label, from
         # 添加当前的子节点
-        push_sibling from, label
+        push_sibling from, to ^ label.to_i32, label, has_child
       elsif at(@array, to).check != from
         # 需要存放的地方已经被占用了
         to = resolve from, base, label
@@ -166,8 +166,8 @@ class Aha
         head_in.value = 0
       else
         b = pointer @blocks, bi
-        pointer(@blocks, b.value.prev).value.next = b.value.next
-        pointer(@blocks, b.value.next).value.prev = b.value.prev
+        at(@blocks, b.value.prev).next = b.value.next
+        at(@blocks, b.value.next).prev = b.value.prev
         if bi == head_in.value
           # 如果双向列表的头 是 bi 那么应该将头设为bi的next
           head_in.value = b.value.next
@@ -188,7 +188,7 @@ class Aha
         tail_out = pointer @blocks, head_out.value
         b.value.prev = tail_out.value.prev
         b.value.next = head_out.value
-        pointer(@blocks, tail_out.value.prev).value.next = bi
+        at(@blocks, tail_out.value.prev).next = bi
         head_out.value, tail_out.value.prev = bi, bi
       end
     end
@@ -210,8 +210,8 @@ class Aha
     #   head_in : 原来block的头部指针
     #   head
     private def transfer_block(bi : Int32, head_in : Pointer(Int32), head_out : Pointer(Int32))
-      pop_block bi, head_in, bi == pointer(@blocks, bi).value.next # 当一个双向列表的next是自己时，说明列表中只有一个元素了
-      push_block bi, head_out, head_out.value == 0 && pointer(@blocks, bi).value.num != 0
+      pop_block bi, head_in, bi == at(@blocks, bi).next # 当一个双向列表的next是自己时，说明列表中只有一个元素了
+      push_block bi, head_out, head_out.value == 0 && at(@blocks, bi).num != 0
     end
 
     # 找到一个空的节点，返回节点 id
@@ -270,7 +270,7 @@ class Aha
         e_ptr.value.value = -prev
         e_ptr.value.check = -next_
         prev_ptr.value.check = -e
-        pointer(@array, next_).value.value = -e
+        at(@array, next_).value = -e
         if b.value.num == 2 || b.value.trial == @max_trial
           # 如果刚好达到两个，那么就需要从, C 队列，放入 O 队列
           transfer_block bi, pointerof(@bheadC), pointerof(@bheadO) unless bi == 0
@@ -292,23 +292,20 @@ class Aha
     # params:
     #   from 父节点id
     #   label 当前节点 label
-    private def push_sibling(from : Int32, label : UInt8)
+    private def push_sibling(from : Int32, base : Int32, label : UInt8, has_child : Bool)
       from_ptr = pointer @array, from
       child_ptr = from_ptr.value.child_ptr
-      base = from_ptr.value.base
-      child_num = from_ptr.value.child_num
-      if @ordered && child_num > 0 && label > child_ptr.value
-        child_ptr = pointer(@array, (base ^ child_ptr.value.to_i32)).value.sibling_ptr
-        idx = 1
-        while idx < child_num && child_ptr.value < label
-          child_ptr = pointer(@array, (base ^ child_ptr.value.to_i32)).value.sibling_ptr
-          idx += 1
+      keep_order = @ordered ? (label > child_ptr.value) : (child_ptr.value == 0)
+      if has_child && keep_order
+        child_ptr = at(@array, (base ^ child_ptr.value.to_i32)).sibling_ptr
+        while @ordered && child_ptr.value != 0 && child_ptr.value < label
+          c = at(@array, base ^ child_ptr.value.to_i32).sibling_ptr
         end
       end
       # 加入 sibling 的链表
-      pointer(@array, (base ^ label.to_i32)).value.sibling = child_ptr.value
+      at(@array, (base ^ label.to_i32)).sibling = child_ptr.value
       child_ptr.value = label
-      from_ptr.value.child_num += 1
+      from_ptr.value.child_num = from_ptr.value.child_num + 1
     end
 
     # 将 label 节点从 sibling 链表移出
@@ -316,10 +313,10 @@ class Aha
       from_ptr = pointer @array, from
       child_ptr = from_ptr.value.child_ptr
       while child_ptr.value != label
-        child = pointer(@array, (base ^ child_ptr.value.to_i32)).value.sibling_ptr
+        child = at(@array, (base ^ child_ptr.value.to_i32)).sibling_ptr
       end
-      child.value = pointer(@array, (base ^ c.value.to_i32)).value.sibling
-      from_ptr.value.child_num -= 1
+      child.value = at(@array, (base ^ c.value.to_i32)).sibling
+      from_ptr.value.child_num = from_ptr.value.child_num - 1
     end
 
     # 是否保留 pnode
@@ -334,33 +331,31 @@ class Aha
     # 返回 子节点 的 id
     def child(id : Int32, label : UInt8) : Int32 # < 0 说明不存在
       parent_ptr = pointer @array, id
-      return -1 if parent_ptr.value.child_num == 0
       base = parent_ptr.value.base
       cid = base ^ label.to_i32
-      return -1 if cid >= @size || !pointer(@array, cid).value.is_child?(id)
+      return -1 if cid < 0 || cid >= @size || !at(@array, cid).is_child?(id)
       return cid
     end
 
     # yield 所有子节点的 id, label
-    def childs(id : Int32, &block)
+    def children(id : Int32, &block)
       parent_ptr = pointer @array, id
-      return if parent_ptr.value.child_num == 0
       base = parent_ptr.value.base
       s = parent_ptr.value.child
       if s == 0 && base > 0
-        s = pointer(@array, s).value.sibling
+        s = at(@array, base).sibling
       end
       while s != 0
         to = base ^ s.to_i32
         break if to < 0
         yield NodeDesc.new(to, s)
-        s = pointer(@array, s).value.sibling
+        s = at(@array, to).sibling
       end
     end
 
-    def childs(id : Int32) : Array(NodeDesc)
+    def children(id : Int32) : Array(NodeDesc)
       req = [] of NodeDesc
-      childs.each do |c|
+      children.each do |c|
         req << c
       end
       return req
@@ -370,19 +365,19 @@ class Aha
       children = Array(UInt8).new(257)
       if label == 0
         children << c
-        c = pointer(@array, base ^ c.to_i32).value.sibling
+        c = at(@array, base ^ c.to_i32).sibling
       end
 
       if @ordered
         while c != 0 && c <= label
           children << c
-          c = pointer(@array, base ^ c.to_i32).value.sibling
+          c = at(@array, base ^ c.to_i32).sibling
         end
       end
       children << label if append_label
       while c != 0
         children << c
-        c = pointer(@array, base ^ c.to_i32).value.sibling
+        c = at(@array, base ^ c.to_i32).sibling
       end
       return children
     end
@@ -398,7 +393,7 @@ class Aha
     def find_places(child : Array(UInt8)) : Int32
       bi = @bheadO
       if bi != 0
-        bz = pointer(@blocks, @bheadO).value.prev
+        bz = at(@blocks, @bheadO).prev
         nc = child.size
         while true
           b = pointer @blocks, bi
@@ -409,7 +404,7 @@ class Aha
               base = e ^ child[0].to_i32
               i = 0
               child.each_with_index do |c, i|
-                break unless pointer(@array, (base ^ c.to_i32)).value.check < 0
+                break unless at(@array, (base ^ c.to_i32)).check < 0
                 if i == child.size - 1
                   # 每个子节点都能插入，就这个block了。
                   # ehead 是，
@@ -418,7 +413,7 @@ class Aha
                 end
               end
               # 因为空闲的 slot 是链表管理的，check直接就是下一个slot 了
-              e = -pointer(@array, e).value.check
+              e = -at(@array, e).check
               if e == b.value.ehead
                 # 已经找过一遍了
                 break
@@ -489,8 +484,8 @@ class Aha
         n.value.flags = n_.value.flags
         if n.value.value < 0 && chl != 0
           # 更新孙子节点的父节点信息
-          c = pointer(@array, to_).value.child
-          pointer(@array, to).value.child = c
+          c = at(@array, to_).child
+          at(@array, to).child = c
           ptr = pointer(@array, n.value.base ^ c.to_i32)
           ptr.value.check = to
           c = ptr.value.sibling
@@ -503,7 +498,7 @@ class Aha
         from_n = to if !flag && to_ == from_n
         if !flag && to_ == to_pn
           # 雀巢鸠占
-          push_sibling from_n, label_n
+          push_sibling from_n, to_pn ^ label_n.to_i32, label_n, true
           to_ptr_ = pointer @array, to_
           to_ptr_.value.child = 0_u8
           n_.value.value = VALUE_LIMIT
@@ -517,8 +512,8 @@ class Aha
     end
 
     def is_end?(id : Int32) : Bool
-      return true if pointer(@array, id).value.end?
-      pointer(@array, id).value.child == 0
+      return true if at(@array, id).end?
+      at(@array, id).child == 0
     end
 
     protected def status
@@ -541,7 +536,7 @@ class Aha
       from_ptr = pointer @array, from
       return -1 if from_ptr.value.value >= 0
       to = from_ptr.value.base ^ byte.to_i32
-      if pointer(@array, to).value.check != from
+      if at(@array, to).check != from
         return -1
       end
       return to
@@ -559,9 +554,9 @@ class Aha
     private def key(id : Int32) : Array(Byte)
       bytes = Array(UInt8).new
       while id > 0
-        from = pointer(@array, id).value.check
+        from = at(@array, id).check
         raise "no path" if from < 0
-        chr = pointer(@array, from).value.base ^ id
+        chr = at(@array, from).base ^ id
         if chr != 0
           key << chr
         end
@@ -603,7 +598,7 @@ class Aha
       to_ptr = pointer @array, to
       if to_ptr.value < 0
         base = to_ptr.base
-        if pointer(@array, base).value.check == to
+        if at(@array, base).check == to
           to = base
         end
       end
@@ -673,7 +668,7 @@ class Aha
       c = from_ptr.value.child
       while c != 0
         to = from_ptr.value.base ^ c.to_i32
-        c = pointer(@array, to).value.child
+        c = at(@array, to).child
         from = to
         from_ptr = pointer @array, from
       end
@@ -691,7 +686,7 @@ class Aha
         from_ptr = pointer @array, from
       end
       return -1 if from == root
-      from = pointer(@array, from_ptr.value.check).value.base ^ c.to_i32
+      from = at(@array, from_ptr.value.check).base ^ c.to_i32
       return self.begin(from)
     end
   end
