@@ -8,6 +8,6 @@ describe Aha do
     matcher.match("我是中国人") do |hit|
       matched << ({hit.end, hit.value})
     end
-    matched.should eq([{0, 0}, {1, 1}, {2, 2}])
+    matched.should eq([{1, 0}, {2, 1}, {3, 2}])
   end
 end

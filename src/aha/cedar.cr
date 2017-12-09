@@ -45,12 +45,12 @@ class Aha
         @flags |= END_MASK
       end
 
-      def base
+      def base : Int32
         -(@value + 1)
       end
 
-      def is_child?(par)
-        @check = par
+      def is_child?(par) : Bool
+        @check == par
       end
 
       def child_ptr
@@ -78,7 +78,6 @@ class Aha
 
     @array : Array(Node)
     @blocks : Array(Block)
-    @key_lens : Array(Int32)
     @reject : Array(Int32)
     @bheadF : Int32
     @bheadC : Int32
@@ -86,12 +85,14 @@ class Aha
     @size : Int32
     @ordered : Bool
     @max_trial : Int32
+    @key_num : Int32
 
     protected getter :array
+    getter :key_num
 
     def initialize(@ordered = false)
       capacity = 256
-      @key_lens = Array(Int32).new
+      @key_num = 0
       @array = Array(Node).new(capacity)
       @blocks = Array(Block).new
       @size = capacity
@@ -108,16 +109,12 @@ class Aha
       @bheadO = 0
     end
 
-    def key_len(key : Int32) : Int32
-      @key_lens[key]
-    end
-
-    private macro pointer(arr, idx)
+    macro pointer(arr, idx)
       ({{arr}}.to_unsafe + ({{idx}}))
     end
 
-    private macro at(arr, idx)
-      (pointer({{arr}}, {{idx}}).value)
+    macro at(arr, idx)
+      (Cedar.pointer({{arr}}, {{idx}}).value)
     end
 
     # 从 key 的 start 位开始, 从 from 节点开始遍历，如果没有节点就创建节点, 返回最终的叶子节点
@@ -583,11 +580,11 @@ class Aha
 
     def insert(key : Bytes | Array(UInt8)) : Int32
       p = get key, 0, 0 # 创建节点
-      id = @key_lens.size
+      id = @key_num
       p_ptr = @array.to_unsafe + p
       p_ptr.value.value = id # 设置 id
       p_ptr.value.end!
-      @key_lens << key.size
+      @key_num += 1
       return id
     end
 
@@ -622,7 +619,7 @@ class Aha
     def []?(key : Bytes | Array(UInt8)) : Int32?
       to = jump key, 0
       return nil if to < 0
-      vk = vkey to
+      vk = value to
       return nil if vk < 0
       return vk
     end
@@ -634,13 +631,13 @@ class Aha
     end
 
     # 返回key的所有前缀
-    # yield vkey
+    # yield value
     def prefix_match(key : Bytes | Array(UInt8), num : Int32)
       from = 0
       key.each_with_index do |k, i|
         to = jump(k, from)
         break if to < 0
-        vk = vkey to
+        vk = value to
         if vk >= 0
           yield vk
           num -= 1
@@ -657,7 +654,7 @@ class Aha
       from = self.begin root
       while true
         return if from < 0
-        yield vkey from
+        yield value from
         from = self.next from, root
       end
     end

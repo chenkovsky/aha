@@ -3,6 +3,7 @@ require "./aha/*"
 class Aha
   # 如果找不到子节点，每次都去fail节点查看有没有相对应的子节点。
   # 相应的，如果找到了end节点，也需要将fail节点的out values加入
+
   struct Hit
     @start : Int32
     @end : Int32
@@ -26,36 +27,41 @@ class Aha
   @da : Cedar
   @output : Array(OutNode)
   @fails : Array(Int32)
+  @key_lens : Array(Int32)
 
-  def self.compile(keys : Array(String)) : Aha
+  def self.compile(keys : Array(String) | Array(Array(UInt8))) : Aha
     da = Cedar.new
     keys.each { |key| da.insert key }
     self.compile da
   end
 
+  alias NodeDesc = NamedTuple(node: Cedar::NodeDesc, len: Int32)
+
   def self.compile(da : Cedar) : Aha
     nlen = da.array.size
     fails = Array(Int32).new(nlen, -1)
     output = Array(OutNode).new(nlen, OutNode.new(-1, -1))
-    q = Deque(Cedar::NodeDesc).new
+    q = Deque(NodeDesc).new
+    key_lens = Array(Int32).new(da.key_num, 0)
     ro = 0
     fails[ro] = ro
     da.children(ro) do |c|
       # 根节点的子节点，失败都返回根节点
       fails[c.id] = ro
-      q << c
+      q << ({node: c, len: 1})
     end
     while !q.empty?
-      e = q.shift
-      STDERR.puts e
+      n = q.shift
+      e = n[:node]
+      l = n[:len]
       nid = e.id
       if da.is_end? nid
         vk = da.value nid
-        output[nid].value = vk
+        key_lens[vk] = l
+        Cedar.at(output, nid).value = vk
       end
       da.children nid do |c|
-        STDERR.puts "child of: #{nid} = #{c}"
-        q << c
+        q << ({node: c, len: l + 1})
         fid = nid
         while fid != ro
           fs = fails[fid]
@@ -67,14 +73,14 @@ class Aha
         end
         fails[c.id] = fid
         if da.is_end? fid
-          output[c.id].next = fid
+          Cedar.at(output, c.id).next = fid
         end
       end
     end
-    return Aha.new(da, output, fails)
+    return Aha.new(da, output, fails, key_lens)
   end
 
-  protected def initialize(@da, @output, @fails)
+  protected def initialize(@da, @output, @fails, @key_lens)
   end
 
   private def match_(seq : Bytes | Array(UInt8))
@@ -95,21 +101,42 @@ class Aha
     end
   end
 
-  def match(str : String)
-    # match str.bytes, &block
-    match str.bytes do |hit|
-      yield hit
+  private def byte_index_to_char_index(seq : String)
+    start_byte_idx = 0
+    ret = {} of Int32 => Int32
+    seq.each_char_with_index do |chr, idx|
+      ret[start_byte_idx] = idx
+      start_byte_idx += chr.bytesize
     end
+    ret[start_byte_idx] = seq.size
+    return ret
   end
 
-  def match(seq : Bytes | Array(UInt8), &block)
-    match_ seq do |idx, nid|
-      e = @output.to_unsafe + nid
+  private def byte_index_to_char_index(seq : Array(UInt8))
+    byte_index_to_char_index seq.to_unsafe
+  end
+
+  private def byte_index_to_char_index(seq : Bytes)
+    byte_index_to_char_index String.new(seq)
+  end
+
+  def match(seq : String | Bytes | Array(UInt8), bytewise : Bool = false, &block)
+    seq_ = seq.is_a?(String) ? seq.bytes : seq
+    offset_mapping = bytewise ? nil : byte_index_to_char_index(seq)
+    match_ seq_ do |idx, nid|
+      e = Cedar.pointer @output, nid
       while e.value.value >= 0
         val = e.value.value
-        len = @da.key_len e.value.value
-        yield Hit.new(idx - len + 1, idx + 1, val)
-        e = @output.to_unsafe + e.value.next
+        len = @key_lens[val]
+        start_offset = idx - len + 1
+        end_offset = idx + 1
+        unless bytewise
+          start_offset = offset_mapping.not_nil![start_offset]
+          end_offset = offset_mapping.not_nil![end_offset]
+        end
+        yield Hit.new(start_offset, end_offset, val)
+        break unless e.value.next >= 0
+        e = Cedar.pointer(@output, e.value.next)
       end
     end
   end
