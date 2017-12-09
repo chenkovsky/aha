@@ -10,4 +10,15 @@ describe Aha do
     end
     matched.should eq([{1, 0}, {2, 1}, {3, 2}])
   end
+
+  it "save load" do
+    matcher = Aha.compile %w(我 我是 是中)
+    matcher.save("aha.bin")
+    machter = Aha.load("aha.bin")
+    matched = [] of Tuple(Int32, Int32)
+    matcher.match("我是中国人") do |hit|
+      matched << ({hit.end, hit.value})
+    end
+    matched.should eq([{1, 0}, {2, 1}, {3, 2}])
+  end
 end

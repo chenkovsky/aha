@@ -20,6 +20,24 @@ class Aha
 
       protected property :value, :check, :sibling, :child, :flags
 
+      def to_io(io : IO, format : IO::ByteFormat)
+        @value.to_io io, format
+        @check.to_io io, format
+        @sibling.to_io io, format
+        @child.to_io io, format
+        @flags.to_io io, format
+      end
+
+      def self.from_io(io : IO, format : IO::ByteFormat) : self
+        n = Node.new(0, 0)
+        n.value = Int32.from_io io, format
+        n.check = Int32.from_io io, format
+        n.sibling = UInt8.from_io io, format
+        n.child = UInt8.from_io io, format
+        n.flags = UInt16.from_io io, format
+        n
+      end
+
       def initialize(@value, @check)
         @flags = 0_u16
         @child = 0_u8
@@ -72,6 +90,25 @@ class Aha
 
       property :prev, :next, :num, :reject, :trial, :ehead
 
+      def to_io(io : IO, format : IO::ByteFormat)
+        @prev.to_io io, format
+        @next.to_io io, format
+        @num.to_io io, format
+        @reject.to_io io, format
+        @trial.to_io io, format
+        @ehead.to_io io, format
+      end
+
+      def self.from_io(io : IO, format : IO::ByteFormat) : self
+        prev = Int32.from_io io, format
+        next_ = Int32.from_io io, format
+        num = Int32.from_io io, format
+        reject = Int32.from_io io, format
+        trial = Int32.from_io io, format
+        ehead = Int32.from_io io, format
+        Block.new(prev, next_, trial, ehead, num, reject)
+      end
+
       def initialize(@prev, @next, @trial, @ehead, @num = 256, @reject = 257)
       end
     end
@@ -87,8 +124,48 @@ class Aha
     @max_trial : Int32
     @key_num : Int32
 
+    protected setter :array, :blocks, :reject, :bheadF, :bheadC, :bheadO, :size, :ordered, :max_trial, :key_num
+
     protected getter :array
     getter :key_num
+
+    macro array_to_io(arr, io, format)
+      {{arr}}.size.to_io {{io}}, {{format}}
+      (0...{{arr}}.size).each { |idx| Cedar.at({{arr}}, idx).to_io {{io}}, {{format}} }
+    end
+
+    macro array_from_io(arr, type_, io, format)
+      size = Int32.from_io {{io}}, {{format}}
+      {{arr}} = Array({{type_}}).new(size){|_| {{type_}}.from_io {{io}}, {{format}} }
+    end
+
+    def to_io(io : IO, format : IO::ByteFormat)
+      array_to_io @array, io, format
+      array_to_io @blocks, io, format
+      array_to_io @reject, io, format
+      @bheadF.to_io io, format
+      @bheadC.to_io io, format
+      @bheadO.to_io io, format
+      @size.to_io io, format
+      (@ordered ? 1 : 0).to_io io, format
+      @max_trial.to_io io, format
+      @key_num.to_io io, format
+    end
+
+    def self.from_io(io : IO, format : IO::ByteFormat) : self
+      c = Cedar.new
+      array_from_io c.array, Node, io, format
+      array_from_io c.blocks, Block, io, format
+      array_from_io c.reject, Int32, io, format
+      c.bheadF = Int32.from_io io, format
+      c.bheadC = Int32.from_io io, format
+      c.bheadO = Int32.from_io io, format
+      c.size = Int32.from_io io, format
+      c.ordered = Int32.from_io(io, format) != 0
+      c.max_trial = Int32.from_io io, format
+      c.key_num = Int32.from_io io, format
+      return c
+    end
 
     def initialize(@ordered = false)
       capacity = 256
@@ -685,6 +762,20 @@ class Aha
       return -1 if from == root
       from = at(@array, from_ptr.value.check).base ^ c.to_i32
       return self.begin(from)
+    end
+
+    def save(path)
+      File.open(path, "wb") do |f|
+        to_io f, IO::ByteFormat::LittleEndian
+      end
+    end
+
+    def self.load(path)
+      da = Cedar.new
+      File.open(path, "rb") do |f|
+        da.from_io f, IO::ByteFormat::LittleEndian
+      end
+      da
     end
   end
 end

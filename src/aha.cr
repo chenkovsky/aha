@@ -22,12 +22,38 @@ class Aha
 
     def initialize(@next, @value)
     end
+
+    def to_io(io : IO, format : IO::ByteFormat)
+      @next.to_io io, format
+      @value.to_io io, format
+    end
+
+    def self.from_io(io : IO, format : IO::ByteFormat) : self
+      next_ = Int32.from_io io, format
+      value = Int32.from_io io, format
+      return OutNode.new(next_, value)
+    end
   end
 
   @da : Cedar
   @output : Array(OutNode)
   @fails : Array(Int32)
   @key_lens : Array(Int32)
+
+  def to_io(io : IO, format : IO::ByteFormat)
+    @da.to_io io, format
+    Cedar.array_to_io @output, io, format
+    Cedar.array_to_io @fails, io, format
+    Cedar.array_to_io @key_lens, io, format
+  end
+
+  def from_io(io : IO, format : IO::ByteFormat) : self
+    @da = Cedar.from_io io, format
+    Cedar.array_from_io @output, OutNode, io, format
+    Cedar.array_from_io @fails, Int32, io, format
+    Cedar.array_from_io @key_lens, Int32, io, format
+    self
+  end
 
   def self.compile(keys : Array(String) | Array(Array(UInt8))) : Aha
     da = Cedar.new
@@ -139,5 +165,19 @@ class Aha
         e = Cedar.pointer(@output, e.value.next)
       end
     end
+  end
+
+  def save(path)
+    File.open(path, "wb") do |f|
+      to_io f, IO::ByteFormat::LittleEndian
+    end
+  end
+
+  def self.load(path)
+    ah = Aha.new Cedar.new, Array(OutNode).new, Array(Int32).new, Array(Int32).new
+    File.open(path, "rb") do |f|
+      ah.from_io f, IO::ByteFormat::LittleEndian
+    end
+    ah
   end
 end
