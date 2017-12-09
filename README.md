@@ -1,6 +1,6 @@
 # aha
 
-TODO: Write a description here
+ahocorasick algorithm based on cedar which is a high performance double array trie.
 
 ## Installation
 
@@ -9,16 +9,25 @@ Add this to your application's `shard.yml`:
 ```yaml
 dependencies:
   aha:
-    github: [your-github-name]/aha
+    github: chenkovsky/aha
 ```
 
 ## Usage
 
 ```crystal
 require "aha"
+it "save load" do
+    matcher = Aha.compile %w(我 我是 是中)
+    matcher.save("aha.bin") # serialize automata into file
+    machter = Aha.load("aha.bin") # load automata from file
+    matched = [] of Tuple(Int32, Int32)
+    matcher.match("我是中国人") do |hit|
+      matched << ({hit.end, hit.value})
+    end
+    matched.should eq([{1, 0}, {2, 1}, {3, 2}])
+end
 ```
 
-TODO: Write usage instructions here
 
 ## Development
 
@@ -26,7 +35,7 @@ TODO: Write development instructions here
 
 ## Contributing
 
-1. Fork it ( https://github.com/[your-github-name]/aha/fork )
+1. Fork it ( https://github.com/chenkovsky/aha/fork )
 2. Create your feature branch (git checkout -b my-new-feature)
 3. Commit your changes (git commit -am 'Add some feature')
 4. Push to the branch (git push origin my-new-feature)
@@ -34,4 +43,4 @@ TODO: Write development instructions here
 
 ## Contributors
 
-- [[your-github-name]](https://github.com/[your-github-name]) chenkovsky - creator, maintainer
+- [chenkovsky](https://github.com/chenkovsky) chenkovsky - creator, maintainer
