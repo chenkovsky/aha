@@ -1,4 +1,4 @@
-class Aha
+module Aha
   class Cedar
     def to_dot
       io = String::Builder.new

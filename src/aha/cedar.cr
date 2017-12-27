@@ -1,4 +1,4 @@
-class Aha
+module Aha
   class Cedar
     VALUE_LIMIT = (1 << 31) - 1
 
@@ -606,7 +606,7 @@ class Aha
     end
 
     # jumpe 返回节点id
-    private def jump(byte : UInt8, from : Int32) : Int32
+    private def jump(byte : UInt8, from : Int32 = 0) : Int32
       from_ptr = pointer @array, from
       return -1 if from_ptr.value.value >= 0
       to = from_ptr.value.base ^ byte.to_i32
@@ -616,12 +616,22 @@ class Aha
       return to
     end
 
-    private def jump(path : Bytes | Array(UInt8), from : Int32) : Int32 # 小于 0 说明没有路径
+    private def jump(path : Bytes | Array(UInt8), from : Int32 = 0) : Int32 # 小于 0 说明没有路径
       path.each do |byte|
         from = jump byte, from
         return -1 if from < 0
       end
-      return to
+      return from
+    end
+
+    # yield 路上的节点
+    private def jump(path : Bytes | Array(UInt8), from : Int32 = 0, &block) : Int32 # 小于 0 说明没有路径
+      path.each_with_index do |byte, idx|
+        from = jump byte, from
+        return -1 if from < 0
+        yield from, idx
+      end
+      return from
     end
 
     # 返回给定节点的到根节点的path
