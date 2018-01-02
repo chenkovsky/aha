@@ -40,20 +40,20 @@ module Aha
 
     def to_io(io : IO, format : IO::ByteFormat)
       @da.to_io io, format
-      Cedar.array_to_io @output, io, format
-      Cedar.array_to_io @fails, io, format
-      Cedar.array_to_io @key_lens, io, format
+      Aha.array_to_io @output, io, format
+      Aha.array_to_io @fails, io, format
+      Aha.array_to_io @key_lens, io, format
     end
 
     def from_io(io : IO, format : IO::ByteFormat) : self
       @da = Cedar.from_io io, format
-      Cedar.array_from_io @output, OutNode, io, format
-      Cedar.array_from_io @fails, Int32, io, format
-      Cedar.array_from_io @key_lens, Int32, io, format
+      Aha.array_from_io @output, OutNode, io, format
+      Aha.array_from_io @fails, Int32, io, format
+      Aha.array_from_io @key_lens, Int32, io, format
       self
     end
 
-    def self.compile(keys : Array(String) | Array(Array(UInt8))) : AC
+    def self.compile(keys : Array(String) | Array(Array(UInt8)) | Array(Bytes)) : AC
       da = Cedar.new
       keys.each { |key| da.insert key }
       self.compile da
@@ -82,7 +82,7 @@ module Aha
         if da.is_end? nid
           vk = da.value nid
           key_lens[vk] = l
-          Cedar.at(output, nid).value = vk
+          Aha.at(output, nid).value = vk
         end
         da.children nid do |c|
           q << ({node: c, len: l + 1})
@@ -97,7 +97,7 @@ module Aha
           end
           fails[c.id] = fid
           if da.is_end? fid
-            Cedar.at(output, c.id).next = fid
+            Aha.at(output, c.id).next = fid
           end
         end
       end
@@ -148,7 +148,7 @@ module Aha
       seq_ = seq.is_a?(String) ? seq.bytes : seq
       offset_mapping = bytewise ? nil : byte_index_to_char_index(seq)
       match_ seq_ do |idx, nid|
-        e = Cedar.pointer @output, nid
+        e = Aha.pointer @output, nid
         while e.value.value >= 0
           val = e.value.value
           len = @key_lens[val]
@@ -160,7 +160,7 @@ module Aha
           end
           yield Hit.new(start_offset, end_offset, val)
           break unless e.value.next >= 0
-          e = Cedar.pointer(@output, e.value.next)
+          e = Aha.pointer(@output, e.value.next)
         end
       end
     end

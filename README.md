@@ -17,9 +17,9 @@ dependencies:
 ```crystal
 require "aha"
 it "save load" do
-    matcher = Aha.compile %w(我 我是 是中)
+    matcher = Aha::AC.compile %w(我 我是 是中)
     matcher.save("aha.bin") # serialize automata into file
-    machter = Aha.load("aha.bin") # load automata from file
+    machter = Aha::AC.load("aha.bin") # load automata from file
     matched = [] of Tuple(Int32, Int32)
     matcher.match("我是中国人") do |hit|
       matched << ({hit.end, hit.value})
@@ -27,6 +27,11 @@ it "save load" do
     matched.should eq([{1, 0}, {2, 1}, {3, 2}])
 end
 ```
+
+# TODO
+
+[] implement DAWG
+[] dynamic AC
 
 
 ## Development
