@@ -1,6 +1,6 @@
 # aha
 
-ahocorasick algorithm based on cedar which is a high performance double array trie.
+ahocorasick automaton based on cedar which is a high performance double array trie. semi-dynamic ahocorasick automaton based.
 
 ## Installation
 
@@ -26,11 +26,38 @@ it "save load" do
     end
     matched.should eq([{1, 0}, {2, 1}, {3, 2}])
 end
+
+  it "dynamic ac" do
+    matcher = Aha::DAC.compile %w(我 我是 是中)
+    matched = [] of Tuple(Int32, Int32)
+    matcher.match("我是中国人") do |hit|
+      matched << ({hit.end, hit.value})
+    end
+    matched.should eq([{1, 0}, {2, 1}, {3, 2}])
+    matcher.insert("中国")
+    matched = [] of Tuple(Int32, Int32)
+    matcher.match("我是中国人") do |hit|
+      matched << ({hit.end, hit.value})
+    end
+    matched.should eq([{1, 0}, {2, 1}, {3, 2}, {4, 2}])
+  end
+
+  it "dynamic ac save load" do
+    matcher = Aha::DAC.compile %w(我 我是 是中 中国)
+    matcher.save("aha.bin")
+    matcher = Aha::DAC.load("aha.bin")
+    matched = [] of Tuple(Int32, Int32)
+    matcher.match("我是中国人") do |hit|
+      matched << ({hit.end, hit.value})
+    end
+    matched.should eq([{1, 0}, {2, 1}, {3, 2}, {4, 2}])
+  end
 ```
 
 # TODO
 
 [] implement DAWG
+
 [] dynamic AC
 
 
