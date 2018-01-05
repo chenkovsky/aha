@@ -40,17 +40,17 @@ module Aha
 
     def to_io(io : IO, format : IO::ByteFormat)
       @da.to_io io, format
-      Aha.array_to_io @output, io, format
-      Aha.array_to_io @fails, io, format
-      Aha.array_to_io @key_lens, io, format
+      Aha.array_to_io @output, OutNode, io, format
+      Aha.array_to_io @fails, Int32, io, format
+      Aha.array_to_io @key_lens, Int32, io, format
     end
 
-    def from_io(io : IO, format : IO::ByteFormat) : self
-      @da = Cedar.from_io io, format
-      Aha.array_from_io @output, OutNode, io, format
-      Aha.array_from_io @fails, Int32, io, format
-      Aha.array_from_io @key_lens, Int32, io, format
-      self
+    def self.from_io(io : IO, format : IO::ByteFormat) : AC
+      da = Cedar.from_io io, format
+      output = Aha.array_from_io OutNode, io, format
+      fails = Aha.array_from_io Int32, io, format
+      key_lens = Aha.array_from_io Int32, io, format
+      AC.new(da, output, fails, key_lens)
     end
 
     def self.compile(keys : Array(String) | Array(Array(UInt8)) | Array(Bytes)) : AC
@@ -172,11 +172,9 @@ module Aha
     end
 
     def self.load(path)
-      ah = AC.new Cedar.new, Array(OutNode).new, Array(Int32).new, Array(Int32).new
       File.open(path, "rb") do |f|
-        ah.from_io f, IO::ByteFormat::LittleEndian
+        return AC.from_io f, IO::ByteFormat::LittleEndian
       end
-      ah
     end
   end
 end

@@ -137,9 +137,9 @@ module Aha
     end
 
     def to_io(io : IO, format : IO::ByteFormat)
-      Aha.array_to_io @array, io, format
-      Aha.array_to_io @blocks, io, format
-      Aha.array_to_io @reject, io, format
+      Aha.array_to_io @array, Node, io, format
+      Aha.array_to_io @blocks, Block, io, format
+      Aha.array_to_io @reject, Int32, io, format
       @bheadF.to_io io, format
       @bheadC.to_io io, format
       @bheadO.to_io io, format
@@ -151,9 +151,9 @@ module Aha
 
     def self.from_io(io : IO, format : IO::ByteFormat) : self
       c = Cedar.new
-      Aha.array_from_io c.array, Node, io, format
-      Aha.array_from_io c.blocks, Block, io, format
-      Aha.array_from_io c.reject, Int32, io, format
+      c.array = Aha.array_from_io Node, io, format
+      c.blocks = Aha.array_from_io Block, io, format
+      c.reject = Aha.array_from_io Int32, io, format
       c.bheadF = Int32.from_io io, format
       c.bheadC = Int32.from_io io, format
       c.bheadO = Int32.from_io io, format
