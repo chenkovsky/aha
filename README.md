@@ -1,6 +1,12 @@
 # aha
 
-ahocorasick automaton based on cedar which is a high performance double array trie. semi-dynamic ahocorasick automaton based.
+useful data structure for string processing.
+
+ahocorasick automaton based on cedar which is a high performance double array trie. 
+
+suffix automaton
+
+bk-tree
 
 ## Installation
 
