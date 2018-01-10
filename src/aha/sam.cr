@@ -34,8 +34,6 @@ module Aha
       keys.each do |key|
         sam << key
       end
-      STDERR.puts "# after compile"
-      STDERR.puts sam.to_dot
       return sam
     end
 
@@ -103,48 +101,60 @@ module Aha
     end
 
     def insert(key : String) : Int32
-      output = self[key]?
-      return output if output
       last = 0
       key.each_char do |chr|
         last = sa_extend chr, last
       end
+      return @outputs[last] if @outputs[last] >= 0
       id = @key_lens.size
       @outputs[last] = id
       @key_lens << key.size
       return id
     end
 
-    def sa_extend(chr : Char, last : Int32)
-      cur = create_state(@lens[last] + 1)
-      p = last
-      STDERR.puts "sa_extend: #{cur}"
-      while p != -1 && !@nexts[p].has_key?(chr)
-        @nexts[p][chr] = cur
-        STDERR.puts "set @nexts[#{p}][#{chr}] = #{cur}"
-        p = @slinks[p]
+    def sa_extend(chr : Char, activenode : Int32)
+      if @nexts[activenode].has_key? chr
+        newactivenode = @nexts[activenode][chr]
+        return newactivenode if primary_edge?(activenode, newactivenode)
+        return split(activenode, newactivenode, chr)
       end
-      if p == -1
-        @slinks[cur] = 0
-        STDERR.puts "set @slinks[#{cur}] = 0"
-      else
-        q = @nexts[p][chr]
-        if @lens[p] + 1 == @lens[q]
-          @slinks[cur] = q
-          STDERR.puts "[x] set slink: @slinks[#{cur}] = #{q}"
-          @nmas[cur] = q
-        else
-          clone = create_state(@lens[p] + 1, @slinks[q], @nexts[q].clone, 0_u8, @nmas[q])
-          while p != -1 && @nexts[p][chr] == q
-            @nexts[p][chr] = clone
-            STDERR.puts "set clone: @nexts[#{p}][#{chr}] = #{clone}"
-            p = @slinks[p]
+      newactivenode = create_state(@lens[activenode] + 1)
+      @nexts[activenode][chr] = newactivenode
+      currentnode = activenode
+      suffixnode = -1
+      while currentnode != 0 && suffixnode < 0
+        currentnode = @slinks[currentnode]
+        if @nexts[currentnode].has_key?(chr)
+          chl = @nexts[currentnode][chr]
+          if primary_edge?(currentnode, chl)
+            suffixnode = chl
+          else
+            suffixnode = split(currentnode, chl, chr)
           end
-          @nmas[q] = @nmas[cur] = @slinks[q] = @slinks[cur] = clone
-          STDERR.puts "set slink: @slinks[#{q}] = @slinks[#{chr}] = #{clone}"
+        else
+          @nexts[currentnode][chr] = newactivenode
         end
       end
-      cur
+      suffixnode = 0 if suffixnode < 0
+      @slinks[newactivenode] = suffixnode
+      return newactivenode
+    end
+
+    def split(parentnode, childnode, chr)
+      newchildnode = create_state(@lens[parentnode] + 1, next: @nexts[childnode].clone)
+      @nexts[parentnode][chr] = newchildnode
+      @slinks[newchildnode] = @slinks[childnode]
+      @slinks[childnode] = newchildnode
+      currentnode = parentnode
+      while currentnode != 0
+        currentnode = @slinks[currentnode]
+        if @nexts[currentnode][chr] == childnode # 还需要检查是否是secondary edge
+          @nexts[currentnode][chr] = newchildnode
+        else
+          break
+        end
+      end
+      return newchildnode
     end
 
     def save(path)
