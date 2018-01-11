@@ -33,38 +33,39 @@ it "save load" do
     matched.should eq([{1, 0}, {2, 1}, {3, 2}])
 end
 
-  it "dynamic ac" do
-    matcher = Aha::DAC.compile %w(我 我是 是中)
+  it "sam" do
+    matcher = Aha::SAM.compile %w(我 我是 是中)
     matched = [] of Tuple(Int32, Int32)
     matcher.match("我是中国人") do |hit|
       matched << ({hit.end, hit.value})
     end
     matched.should eq([{1, 0}, {2, 1}, {3, 2}])
-    matcher.insert("中国")
-    matched = [] of Tuple(Int32, Int32)
-    matcher.match("我是中国人") do |hit|
-      matched << ({hit.end, hit.value})
-    end
-    matched.should eq([{1, 0}, {2, 1}, {3, 2}, {4, 2}])
   end
 
-  it "dynamic ac save load" do
-    matcher = Aha::DAC.compile %w(我 我是 是中 中国)
+  it "sam save load" do
+    matcher = Aha::SAM.compile %w(我 我是 是中)
     matcher.save("aha.bin")
-    matcher = Aha::DAC.load("aha.bin")
+    machter = Aha::SAM.load("aha.bin")
     matched = [] of Tuple(Int32, Int32)
     matcher.match("我是中国人") do |hit|
       matched << ({hit.end, hit.value})
     end
-    matched.should eq([{1, 0}, {2, 1}, {3, 2}, {4, 2}])
+    matched.should eq([{1, 0}, {2, 1}, {3, 2}])
+  end
+  it "bk tree" do
+    tree = Aha::BKTree.compile(["ab", "bc", "abc"])
+    key_dist_arr = [] of Tuple(String, Int32)
+    tree.match("abc", 0) do |key, dist|
+      key_dist_arr << ({key, dist})
+    end
+    key_dist_arr.should eq([{"abc", 0}])
+    key_dist_arr.clear
+    tree.match("abc", 1) do |key, dist|
+      key_dist_arr << ({key, dist})
+    end
+    key_dist_arr.sort.should eq([{"ab", 1}, {"abc", 0}, {"bc", 1}])
   end
 ```
-
-# TODO
-
-[] implement DAWG
-
-[] dynamic AC
 
 
 ## Development
