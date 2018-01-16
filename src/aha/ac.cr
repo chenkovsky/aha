@@ -36,20 +36,20 @@ module Aha
     @da : Cedar
     @output : Array(OutNode)
     @fails : Array(Int32)
-    @key_lens : Array(Int32)
+    @key_lens : Array(UInt32)
 
     def to_io(io : IO, format : IO::ByteFormat)
       @da.to_io io, format
       Aha.array_to_io @output, OutNode, io, format
       Aha.array_to_io @fails, Int32, io, format
-      Aha.array_to_io @key_lens, Int32, io, format
+      Aha.array_to_io @key_lens, UInt32, io, format
     end
 
     def self.from_io(io : IO, format : IO::ByteFormat) : AC
       da = Cedar.from_io io, format
       output = Aha.array_from_io OutNode, io, format
       fails = Aha.array_from_io Int32, io, format
-      key_lens = Aha.array_from_io Int32, io, format
+      key_lens = Aha.array_from_io UInt32, io, format
       AC.new(da, output, fails, key_lens)
     end
 
@@ -66,7 +66,7 @@ module Aha
       fails = Array(Int32).new(nlen, -1)
       output = Array(OutNode).new(nlen, OutNode.new(-1, -1))
       q = Deque(NodeDesc).new
-      key_lens = Array(Int32).new(da.key_num, 0)
+      key_lens = Array(UInt32).new(da.key_num, 0_u32)
       ro = 0
       fails[ro] = ro
       da.children(ro) do |c|
@@ -81,7 +81,7 @@ module Aha
         nid = e.id
         if da.is_end? nid
           vk = da.value nid
-          key_lens[vk] = l
+          key_lens[vk] = l.to_u32
           Aha.at(output, nid).value = vk
         end
         da.children nid do |c|
@@ -144,6 +144,13 @@ module Aha
       byte_index_to_char_index String.new(seq)
     end
 
+    private KEY_LEN_MASK = ~(1 << 31)
+    private DELETE_MASK  = (1 << 31)
+
+    def delete(kid : Int32)
+      @key_lens[kid] ||= DELETE_MASK
+    end
+
     def match(seq : String | Bytes | Array(UInt8), bytewise : Bool = false, &block)
       seq_ = seq.is_a?(String) ? seq.bytes : seq
       offset_mapping = bytewise ? nil : byte_index_to_char_index(seq)
@@ -151,14 +158,16 @@ module Aha
         e = Aha.pointer @output, nid
         while e.value.value >= 0
           val = e.value.value
-          len = @key_lens[val]
-          start_offset = idx - len + 1
-          end_offset = idx + 1
-          unless bytewise
-            start_offset = offset_mapping.not_nil![start_offset]
-            end_offset = offset_mapping.not_nil![end_offset]
+          if @key_lens[val] < KEY_LEN_MASK
+            len = @key_lens[val] & (~(1 << 31))
+            start_offset = idx - len + 1
+            end_offset = idx + 1
+            unless bytewise
+              start_offset = offset_mapping.not_nil![start_offset]
+              end_offset = offset_mapping.not_nil![end_offset]
+            end
+            yield Hit.new(start_offset, end_offset, val)
           end
-          yield Hit.new(start_offset, end_offset, val)
           break unless e.value.next >= 0
           e = Aha.pointer(@output, e.value.next)
         end

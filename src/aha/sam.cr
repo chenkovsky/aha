@@ -6,7 +6,7 @@ module Aha
     @nexts : Array(Hash(Char, Int32))
     @flags : Array(UInt8)
     @outputs : Array(Int32) # outputs
-    @key_lens : Array(Int32)
+    @key_lens : Array(UInt32)
 
     private TRUNK_MASK = 1
 
@@ -56,7 +56,7 @@ module Aha
       nmas = Aha.array_from_io Int32, io, format
       flags = Aha.array_from_io UInt8, io, format
       outputs = Aha.array_from_io Int32, io, format
-      key_lens = Aha.array_from_io Int32, io, format
+      key_lens = Aha.array_from_io UInt32, io, format
       next_size = Int32.from_io io, format
       nexts = (0...next_size).map { |_| Aha.hash_from_io Char, Int32, io, format }
       return SAM.new(lens, slinks, nmas, nexts, flags, outputs, key_lens)
@@ -91,7 +91,7 @@ module Aha
       @nexts = [] of Hash(Char, Int32)
       @flags = [] of UInt8
       @outputs = [] of Int32
-      @key_lens = [] of Int32
+      @key_lens = [] of UInt32
       create_state
     end
 
@@ -108,7 +108,7 @@ module Aha
       return @outputs[last] if @outputs[last] >= 0
       id = @key_lens.size
       @outputs[last] = id
-      @key_lens << key.size
+      @key_lens << key.size.to_u32
       return id
     end
 
@@ -190,10 +190,10 @@ module Aha
         end
         sid = @nexts[sid][chr] if transition?(sid, chr)
         sout = sid
-        yield AC::Hit.new(idx + 1 - @key_lens[@outputs[sout]], idx + 1, @outputs[sout]) if marked?(sout)
+        yield AC::Hit.new(idx + 1 - @key_lens[@outputs[sout]], idx + 1, @outputs[sout]) if marked?(sout) && @key_lens[@outputs[sout]] < KEY_LEN_MASK
         sout = nma(sout)
         while sout >= 0
-          yield AC::Hit.new(idx + 1 - @key_lens[@outputs[sout]], idx + 1, @outputs[sout])
+          yield AC::Hit.new(idx + 1 - @key_lens[@outputs[sout]], idx + 1, @outputs[sout]) if @key_lens[@outputs[sout]] < KEY_LEN_MASK
           sout = nma(sout)
         end
       end
@@ -225,6 +225,13 @@ module Aha
 
     private def primary_edge?(nid, chl) : Bool
       @lens[chl] == @lens[nid] + 1
+    end
+
+    private KEY_LEN_MASK = ~(1 << 31)
+    private DELETE_MASK  = (1 << 31)
+
+    def delete(kid : Int32)
+      @key_lens[kid] ||= DELETE_MASK
     end
   end
 end
