@@ -7,6 +7,7 @@ module Aha
     @flags : Array(UInt8)
     @outputs : Array(Int32) # outputs
     @key_lens : Array(UInt32)
+    @del_num : Int32
 
     private TRUNK_MASK = 1
 
@@ -44,6 +45,7 @@ module Aha
       Aha.array_to_io @flags, UInt8, io, format
       Aha.array_to_io @outputs, UInt32, io, format
       Aha.array_to_io @key_lens, UInt32, io, format
+      @del_num.to_io io, format
       @nexts.size.to_io io, format
       @nexts.each do |hs|
         Aha.hash_to_io hs, Char, Int32, io, format
@@ -57,9 +59,10 @@ module Aha
       flags = Aha.array_from_io UInt8, io, format
       outputs = Aha.array_from_io Int32, io, format
       key_lens = Aha.array_from_io UInt32, io, format
+      del_num = Int32.from_io io, format
       next_size = Int32.from_io io, format
       nexts = (0...next_size).map { |_| Aha.hash_from_io Char, Int32, io, format }
-      return SAM.new(lens, slinks, nmas, nexts, flags, outputs, key_lens)
+      return SAM.new(lens, slinks, nmas, nexts, flags, outputs, key_lens, del_num)
     end
 
     private def create_state(len : Int32 = 0, slink : Int32 = -1, next next_ = {} of Char => Int32, flag : UInt8 = 0_u8, nmas : Int32 = -2) : Int32
@@ -81,7 +84,7 @@ module Aha
       sid
     end
 
-    def initialize(@lens, @slinks, @nmas, @nexts, @flags, @outputs, @key_lens)
+    def initialize(@lens, @slinks, @nmas, @nexts, @flags, @outputs, @key_lens, @del_num = 0)
     end
 
     def initialize
@@ -92,6 +95,7 @@ module Aha
       @flags = [] of UInt8
       @outputs = [] of Int32
       @key_lens = [] of UInt32
+      @del_num = 0
       create_state
     end
 
@@ -105,7 +109,14 @@ module Aha
       key.each_char do |chr|
         last = sa_extend chr, last
       end
-      return @outputs[last] if @outputs[last] >= 0
+      if @outputs[last] >= 0
+        kid = @outputs[last]
+        if @key_lens[kid] & DELETE_MASK != 0
+          @key_lens[kid] ^= DELETE_MASK
+          @del_num -= 1
+        end
+        return kid
+      end
       id = @key_lens.size
       @outputs[last] = id
       @key_lens << key.size.to_u32
@@ -231,7 +242,12 @@ module Aha
     private DELETE_MASK  = (1 << 31)
 
     def delete(kid : Int32)
+      @del_num += 1 if @key_lens[kid] & DELETE_MASK == 0
       @key_lens[kid] ||= DELETE_MASK
+    end
+
+    def size
+      @key_lens.size - @del_num
     end
   end
 end

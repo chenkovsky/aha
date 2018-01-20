@@ -37,12 +37,14 @@ module Aha
     @output : Array(OutNode)
     @fails : Array(Int32)
     @key_lens : Array(UInt32)
+    @del_num : Int32
 
     def to_io(io : IO, format : IO::ByteFormat)
       @da.to_io io, format
       Aha.array_to_io @output, OutNode, io, format
       Aha.array_to_io @fails, Int32, io, format
       Aha.array_to_io @key_lens, UInt32, io, format
+      @del_num.to_io io, format
     end
 
     def self.from_io(io : IO, format : IO::ByteFormat) : AC
@@ -50,12 +52,16 @@ module Aha
       output = Aha.array_from_io OutNode, io, format
       fails = Aha.array_from_io Int32, io, format
       key_lens = Aha.array_from_io UInt32, io, format
-      AC.new(da, output, fails, key_lens)
+      del_num = Int32.from_io io, format
+      AC.new(da, output, fails, key_lens, del_num)
     end
 
     def self.compile(keys : Array(String) | Array(Array(UInt8)) | Array(Bytes)) : AC
       da = Cedar.new
-      keys.each { |key| da.insert key }
+      keys.each_with_index do |key, idx|
+        kid = da.insert key
+        raise "key:#{key} appear twice." if kid != idx
+      end
       self.compile da
     end
 
@@ -104,7 +110,7 @@ module Aha
       return AC.new(da, output, fails, key_lens)
     end
 
-    protected def initialize(@da, @output, @fails, @key_lens)
+    protected def initialize(@da, @output, @fails, @key_lens, @del_num = 0)
     end
 
     private def match_(seq : Bytes | Array(UInt8))
@@ -147,7 +153,12 @@ module Aha
     private KEY_LEN_MASK = ~(1 << 31)
     private DELETE_MASK  = (1 << 31)
 
+    def size
+      @key_lens - @del_num
+    end
+
     def delete(kid : Int32)
+      @del_num += 1 if (@key_lens[kid] & DELETE_MASK) == 0
       @key_lens[kid] ||= DELETE_MASK
     end
 
