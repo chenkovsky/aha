@@ -68,4 +68,62 @@ module Aha
       %hash
     end
   end
+
+  macro string_array_to_io(string_arr, io, format)
+    {{string_arr}}.size.to_io {{io}}, {{format}}
+    %total_length = 0
+    {{string_arr}}.each do |s|
+      %total_length += s.bytesize + 1
+      io.print s
+      io.write_byte 0_u8
+    end
+    %padding = 4 - %total_length % 4
+    if %padding != 4
+      (0...%padding).each{|_| Aha.to_io 0_u8, UInt8, io, format}
+    end
+  end
+
+  macro string_array_from_io(io, format)
+    begin
+      %size = Int32.from_io {{io}}, {{format}}
+      %total_length = 0
+      %bytes = Array(UInt8).new
+      %arr = (0...%size).map do|_|
+        s = Aha.read_utf8_string({{io}}, %bytes)
+        %total_length += %bytes.size + 1
+        s
+      end
+      %padding = 4 - %total_length % 4
+      if %padding != 4
+        (0...%padding).each{|_| Aha.from_io UInt8, {{io}}, {{format}} }
+      end
+      %arr
+    end
+  end
+
+  def self.read_utf8_string(io, bytes = Array(UInt8).new)
+    bytes.clear
+    s = io.read_utf8_byte.not_nil!
+    while s != 0
+      bytes << s
+      s = io.read_utf8_byte.not_nil!
+    end
+    return String.new(bytes.to_unsafe, bytes.size)
+  end
+
+  def self.count_bit(v : UInt32)
+    v = v - ((v >> 1) & 0x55555555)
+    v = (v & 0x33333333) + ((v >> 2) & 0x33333333)
+    c = ((v + (v >> 4) & 0xF0F0F0F) * 0x1010101) >> 24
+  end
+
+  MultiplyDeBruijnBitPosition2 = [
+    0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
+    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9,
+  ]
+
+  def self.msb_for_2power(v : UInt32)
+    # 仅限于2的n次
+    MultiplyDeBruijnBitPosition2[(v * 0x077CB531) >> 27]
+  end
 end
