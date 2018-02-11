@@ -201,10 +201,10 @@ module Aha
         end
         sid = @nexts[sid][chr] if transition?(sid, chr)
         sout = sid
-        yield AC::Hit.new(idx + 1 - @key_lens[@outputs[sout]], idx + 1, @outputs[sout]) if marked?(sout) && @key_lens[@outputs[sout]] < KEY_LEN_MASK
+        yield Hit.new(idx + 1 - @key_lens[@outputs[sout]], idx + 1, @outputs[sout]) if marked?(sout) && @key_lens[@outputs[sout]] < KEY_LEN_MASK
         sout = nma(sout)
         while sout >= 0
-          yield AC::Hit.new(idx + 1 - @key_lens[@outputs[sout]], idx + 1, @outputs[sout]) if @key_lens[@outputs[sout]] < KEY_LEN_MASK
+          yield Hit.new(idx + 1 - @key_lens[@outputs[sout]], idx + 1, @outputs[sout]) if @key_lens[@outputs[sout]] < KEY_LEN_MASK
           sout = nma(sout)
         end
       end

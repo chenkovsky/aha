@@ -6,4 +6,8 @@ authors:
 
 crystal: 0.23.1
 
+dependencies:
+  sub_hash:
+    github: chenkovsky/sub_hash
+
 license: MIT

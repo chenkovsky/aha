@@ -2,17 +2,6 @@ module Aha
   # 如果找不到子节点，每次都去fail节点查看有没有相对应的子节点。
   # 相应的，如果找到了end节点，也需要将fail节点的out values加入
   class AC
-    struct Hit
-      @start : Int32
-      @end : Int32
-      @value : Int32
-
-      getter :start, :end, :value
-
-      def initialize(@start, @end, @value)
-      end
-    end
-
     struct OutNode
       @next : Int32
       @value : Int32
@@ -131,17 +120,6 @@ module Aha
       end
     end
 
-    private def byte_index_to_char_index(seq : String)
-      start_byte_idx = 0
-      ret = {} of Int32 => Int32
-      seq.each_char_with_index do |chr, idx|
-        ret[start_byte_idx] = idx
-        start_byte_idx += chr.bytesize
-      end
-      ret[start_byte_idx] = seq.size
-      return ret
-    end
-
     private def byte_index_to_char_index(seq : Array(UInt8))
       byte_index_to_char_index seq.to_unsafe
     end
@@ -164,7 +142,7 @@ module Aha
 
     def match(seq : String | Bytes | Array(UInt8), bytewise : Bool = false, &block)
       seq_ = seq.is_a?(String) ? seq.bytes : seq
-      offset_mapping = bytewise ? nil : byte_index_to_char_index(seq)
+      offset_mapping = bytewise ? nil : Aha.byte_index_to_char_index(seq)
       match_ seq_ do |idx, nid|
         e = Aha.pointer @output, nid
         while e.value.value >= 0

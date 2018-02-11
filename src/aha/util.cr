@@ -126,4 +126,46 @@ module Aha
     # 仅限于2的n次
     MultiplyDeBruijnBitPosition2[(v * 0x077CB531) >> 27]
   end
+
+  protected def self.byte_index_to_char_index(seq : String)
+    start_byte_idx = 0
+    ret = {} of Int32 => Int32
+    seq.each_char_with_index do |chr, idx|
+      ret[start_byte_idx] = idx
+      start_byte_idx += chr.bytesize
+    end
+    ret[start_byte_idx] = seq.size
+    return ret
+  end
+
+  def self.binary_search(arr, elem, reverse = false) : Int32
+    # search in ordered array
+    start = 0
+    end_ = arr.size - 1
+    while start <= end_
+      mid = (start + end_) >> 1
+      if arr[mid] == elem
+        return mid
+      elsif (arr[mid] > elem) && !reverse
+        end_ = mid - 1
+      else
+        start = mid + 1
+      end
+    end
+    return -(start + 1)
+  end
+
+  # 插入已经排过序的数组
+  def self.ordered_insert(arr, target, first = 0, last = arr.size)
+    # insert target into arr such that arr[first..last] is sorted,
+    # given that arr[first..last-1] is already sorted.
+    # Return the position where inserted.
+    index = binary_search(arr, target)
+    return index if index >= 0
+    arr << target
+    ((-index)...arr.size).reverse_each { |i| arr[i] = arr[i - 1] }
+    place = -index - 1
+    arr[place] = target
+    return place
+  end
 end
