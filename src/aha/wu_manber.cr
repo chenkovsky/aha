@@ -113,7 +113,6 @@ module Aha
       hasher = SubHash.from_io io, format
       alphabet = Aha.array_from_io Alphabet, io, format
       patterns_size = Int32.from_io io, format
-      STDERR.puts "patterns_size:#{patterns_size}"
       patterns = (0...patterns_size).map do |_|
         pat_size = Int32.from_io io, format
         slice = Bytes.new(pat_size)
@@ -211,6 +210,7 @@ module Aha
           next
         end
         @pattern_lens[hs1].each do |len|
+          next if len > text_.size
           start_idx = ix - @min_len + 1
           arr = @pattern_maps[@hasher[start_idx, len].to_u32]?
           next unless arr
