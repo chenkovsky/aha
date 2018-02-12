@@ -183,6 +183,7 @@ module Aha
       @pattern_lens = Hash(Int32, Array(Int32)).new
       @pattern_maps = Hash(UInt32, Array(Int32)).new
       @patterns.each_with_index do |pat, j|
+        full_hash = SubHash.hash pat
         (@b..@min_len).reverse_each do |q|
           hs = (0...@b).reverse_each.reduce(0) { |acc, i| (acc << @bits_in_shift) + @alphabet[pat[q - i - 1]].offset }
           shift_len = @min_len - q
@@ -190,7 +191,6 @@ module Aha
           if shift_len == 0
             arr = @pattern_lens[hs] ||= [] of Int32
             Aha.ordered_insert arr, pat.size
-            full_hash = SubHash.hash pat
             arr = @pattern_maps[full_hash.to_u32] ||= [] of Int32
             arr << j
           end
