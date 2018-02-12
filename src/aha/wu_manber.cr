@@ -210,12 +210,12 @@ module Aha
           next
         end
         @pattern_lens[hs1].each do |len|
-          next if len + ix - @min_len + 1 > text_.size
           start_idx = ix - @min_len + 1
+          next if len + start_idx > text_.size
           arr = @pattern_maps[@hasher[start_idx, len].to_u32]?
           next unless arr
           arr.each do |pat_idx|
-            if @patterns[pat_idx].size == len && (start_idx + len <= text_.size) && (0...len).all? { |i| @patterns[pat_idx][i] == text_[start_idx + i] }
+            if @patterns[pat_idx].size == len && (0...len).all? { |i| @patterns[pat_idx][i] == text_[start_idx + i] }
               end_idx = start_idx + len
               unless bytewise
                 start_idx = offset_mapping.not_nil![start_idx]
