@@ -210,7 +210,7 @@ module Aha
           next
         end
         @pattern_lens[hs1].each do |len|
-          next if len > text_.size
+          next if len + ix - @min_len + 1 > text_.size
           start_idx = ix - @min_len + 1
           arr = @pattern_maps[@hasher[start_idx, len].to_u32]?
           next unless arr
