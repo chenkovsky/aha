@@ -10,6 +10,8 @@ bk-tree
 
 symspell, efficient fuzzy matching, better than bk-tree
 
+wumanber, a string matching algorithm
+
 ## Installation
 
 Add this to your application's `shard.yml`:
