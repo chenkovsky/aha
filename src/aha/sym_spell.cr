@@ -402,6 +402,115 @@ module Aha
       return suggestions
     end
 
+    private def sort_by_val(suggestions : Array(SuggestItem))
+      suggestions.sort! do |s1, s2|
+        cmp = s1 <=> s2
+        cmp = s2.val <=> s1.val if cmp == 0
+        cmp
+      end
+    end
+
+    # 此时假设terms的val是频率
+    def match(terms : Array(String), max_edit_distance : Int32 = @max_edit_distance, all : Bool = true) : Array(SuggestItem)
+      raise "max_edit_distance > @max_edit_distance" if max_edit_distance > @max_edit_distance
+      input = terms.join(" ")
+      suggestions = [] of SuggestItem      # suggestions for a single term
+      suggestion_parts = [] of SuggestItem # 1 line with separate parts
+      last_combi = false
+      # translate every term to its best suggestion, otherwise it remains unchanged
+      terms.each_with_index do |term, i|
+        suggestions_previous_term = suggestions.map { |s| s }
+        suggestions = match(term, max_edit_distance, false)
+        sort_by_val(suggestions)
+        if (i > 0 && !last_combi)
+          # 上一个单词没有被合并过的话，那么尝试与当前单词合并
+          suggestions_combi = match(terms[i - 1] + term, max_edit_distance, false)
+          sort_by_val(suggestions_combi)
+          unless suggestions_combi.empty?
+            # 组合后在编辑距离内有合适的单词
+            best1 = suggestion_parts[-1]
+            if suggestions.size > 0
+              # 当前单个词在编辑距离内有词在词库中
+              best2 = suggestions[0]
+            else
+              # 当前单个词不在词库里面
+              best2 = SuggestItem.new(term, max_edit_distance + 1, 0)
+            end
+            input_ = terms[i - 1] + " " + term
+            suggest_ = best1.term + " " + best2.term
+            distance_comparer = EditDistance::DamerauLevenshtein.new
+            distance1 = distance_comparer.distance(input_, suggest_, max_edit_distance)
+            if distance1 >= 0 && suggestions_combi[0].distance + 1 < distance1
+              # 合并后的编辑距离比每个单独的编辑距离小，那么合并
+              suggestions_combi[0] = SuggestItem.new(suggestions_combi[0].term, suggestions_combi[0].distance + 1, suggestions_combi[0].val)
+              suggestion_parts[-1] = suggestions_combi[0]
+              last_combi = true
+              next
+            end
+          end
+        end
+        last_combi = false
+        # alway split terms without suggestion / never split terms with suggestion ed=0 / never split single char terms
+        if suggestions.size > 0 && (suggestions[0].distance == 0 || term.size == 1)
+          # choose best suggestion
+          suggestion_parts << suggestions[0]
+        else
+          # if no perfect suggestion, split word into pairs
+          suggestions_split = [] of SuggestItem
+          # add original term
+          suggestions_split << suggestions[0] if suggestions.size > 0
+          if term.size > 1
+            (1...term.size).each do |j|
+              part1 = term[0, j]
+              part2 = term[j, term.size]
+              suggestions1 = match(part1, max_edit_distance, false)
+              sort_by_val(suggestions1)
+              if suggestions1.size > 0
+                # 分开来补全和不分开补全出了相同的东西
+                break if suggestions.size > 0 && suggestions[0].term == suggestions1[0].term
+                suggestions2 = match(part2, max_edit_distance, false)
+                sort_by_val(suggestions2)
+                if suggestions2.size > 0
+                  # 分开来补全和不分开补全出了相同的东西
+                  break if suggestions.size > 0 && suggestions[0].term == suggestions2[0].term
+                  # 切分出来的term
+                  split_term = suggestions1[0].term + " " + suggestions2[0].term
+
+                  distance_comparer2 = EditDistance::DamerauLevenshtein.new
+                  distance2 = distance_comparer2.distance(split_term, term, max_edit_distance)
+                  distance2 = max_edit_distance + 1 if distance2 < 0
+                  suggestion_split = SuggestItem.new(split_term, distance2, [suggestions1[0].val, suggestions2[0].val].min)
+                  suggestions_split << suggestion_split
+                  break if suggestion_split.distance == 1
+                end
+              end
+            end
+            if suggestions_split.size > 0
+              suggestions_split.sort { |x, y| 2 * (x.distance <=> y.distance) - (x.val <=> y.val) }
+              suggestion_parts << suggestions_split[0]
+            else
+              si = SuggestItem.new(term, max_edit_distance + 1, 0)
+              suggestion_parts << si
+            end
+          else
+            si = SuggestItem.new(term, max_edit_distance + 1, 0)
+            suggestion_parts << si
+          end
+        end
+      end
+      count = Int32::MAX
+      s = String.build do |sb|
+        suggestion_parts.each_with_index do |si, i|
+          sb << si.term
+          sb << ' ' if i != suggestion_parts.size - 1
+          count = si.val if si.val < count
+        end
+      end
+      distance_comparer3 = EditDistance::DamerauLevenshtein.new
+      suggestion = SuggestItem.new(s, distance_comparer3.distance(input, s, Int32::MAX), count)
+      return [suggestion]
+    end
+
     # check whether all delete chars are present in the suggestion prefix in correct order,
     # otherwise this is just a hash collision
     private def delete_in_suggestion_prefix(delete : String,

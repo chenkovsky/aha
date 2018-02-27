@@ -23,4 +23,13 @@ describe Aha do
     matcher.match("rub", 2).map { |x| x.term }.sort.should eq(["Ruby", "rb", "ruby"])
     matcher.match("rub", 2, false).map { |x| x.term }.sort.should eq(["rb", "ruby"])
   end
+
+  it "symspell compound" do
+    vocab = %w(can you read this message despite the horrible spelling mistakes)
+    matcher = Aha::SymSpell.compile Hash.zip(vocab, vocab.map { |_| 10 })
+    matched = matcher.match(%w(Can yu readthis messa ge despite thehorible sppelingmsitakes))
+    matched.size.should eq(1)
+    matched[0].term.should eq("can you read this message despite the horrible spelling mistakes")
+    matched[0].distance.should eq(10)
+  end
 end
