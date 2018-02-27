@@ -145,10 +145,7 @@ module Aha
       compact_mask = UInt32.from_io io, format
       max_length = Int32.from_io io, format
       strings : Array(String) = Aha.string_array_from_io io, format
-      STDERR.puts "line 150"
-      strings.each { |x| STDERR.puts "str:#{x.inspect}" }
       word_num = Int32.from_io io, format
-      STDERR.puts "word_num:#{word_num}"
       words = Hash.zip((0...word_num).map { |_| strings[Int32.from_io(io, format)] }, (0...word_num).map { |_| Int32.from_io(io, format) })
       delete_num = Int32.from_io io, format
       keys = (0...delete_num).map { |_| Int32.from_io io, format }

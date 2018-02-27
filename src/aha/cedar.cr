@@ -1,5 +1,15 @@
 module Aha
   class Cedar
+    struct KV
+      @key : String
+      @value : Int32
+      getter :key, :value
+
+      def initialize(@key, @value)
+      end
+    end
+
+    include Enumerable(KV)
     VALUE_LIMIT = (1 << 31) - 1
 
     struct NodeDesc
@@ -374,11 +384,12 @@ module Aha
     # 将 label 节点从 sibling 链表移出
     private def pop_sibling(from : Int32, label : UInt8)
       from_ptr = Aha.pointer @array, from
+      base = from_ptr.value.base
       child_ptr = from_ptr.value.child_ptr
       while child_ptr.value != label
-        child = Aha.at(@array, (base ^ child_ptr.value.to_i32)).sibling_ptr
+        child_ptr = Aha.at(@array, (base ^ child_ptr.value.to_i32)).sibling_ptr
       end
-      child.value = Aha.at(@array, (base ^ c.value.to_i32)).sibling
+      child_ptr.value = Aha.at(@array, (base ^ child_ptr.value.to_i32)).sibling
       from_ptr.value.child_num = from_ptr.value.child_num - 1
     end
 
@@ -416,9 +427,34 @@ module Aha
       end
     end
 
+    protected def first_child(id : Int32) : NodeDesc?
+      return nil if id < 0
+      parent_ptr = Aha.pointer @array, id
+      base = parent_ptr.value.base
+      s = parent_ptr.value.child
+      if s == 0 && base > 0
+        s = Aha.at(@array, base).sibling
+      end
+      if s != 0
+        to = base ^ s.to_i32
+        return nil if to < 0
+        return NodeDesc.new(to, s)
+      end
+      return nil
+    end
+
+    protected def sibling(to : Int32) : NodeDesc?
+      return nil if to < 0
+      base = Aha.at(@array, Aha.at(@array, to).check).base
+      s = Aha.at(@array, to).sibling
+      return nil if s == 0
+      to = base ^ s.to_i32
+      return NodeDesc.new(to, s)
+    end
+
     def children(id : Int32) : Array(NodeDesc)
       req = [] of NodeDesc
-      children.each do |c|
+      children(id).each do |c|
         req << c
       end
       return req
@@ -624,19 +660,21 @@ module Aha
     end
 
     # 返回给定节点的到根节点的path
-    private def key(id : Int32) : Array(Byte)
+    private def key(id : Int32) : Array(UInt8)
       bytes = Array(UInt8).new
       while id > 0
         from = Aha.at(@array, id).check
         raise "no path" if from < 0
         chr = Aha.at(@array, from).base ^ id
         if chr != 0
-          key << chr
+          bytes << chr.to_u8
         end
         id = from
       end
-      raise "invalid key" if id != 0 || key.size == 0
-      return key.reverse
+      raise "invalid key" if id != 0 || bytes.size == 0
+      bytes = bytes.reverse
+      bytes << 0_u8
+      return bytes
     end
 
     # 返回 这个节点的value值，已占用节点的value值就是key的idx
@@ -648,6 +686,16 @@ module Aha
       to_ptr = Aha.pointer @array, to
       return to_ptr.value.value if to_ptr.value.check == id && to_ptr.value.value >= 0
       raise "no value"
+    end
+
+    protected def has_value?(id) : Bool
+      ptr = Aha.pointer @array, id
+      val = ptr.value.value
+      return true if val >= 0
+      to = ptr.value.base
+      to_ptr = Aha.pointer @array, to
+      return true if to_ptr.value.check == id && to_ptr.value.value >= 0
+      return false
     end
 
     def insert(key : String) : Int32
@@ -664,31 +712,38 @@ module Aha
       return id
     end
 
-    # 返回 被删除的节点, 如果 < 0 就是没有这个key
+    def delete(key : String) : Int32
+      delete key.bytes
+    end
+
+    # 返回 被删除的id, 如果 < 0 就是没有这个key
     def delete(key : Bytes | Array(UInt8)) : Int32
       to = jump key, 0
       return -1 if to < 0
+      vk = value to
+      return -1 if vk < 0
       to_ptr = Aha.pointer @array, to
-      if to_ptr.value < 0
-        base = to_ptr.base
+      if to_ptr.value.value < 0
+        base = to_ptr.value.base
         if Aha.at(@array, base).check == to
           to = base
         end
       end
       while true
         to_ptr = Aha.pointer @array, to
-        from_ptr = Aha.pointer @array, from
         from = to_ptr.value.check
+        from_ptr = Aha.pointer @array, from
         base = from_ptr.value.base
         label = (to ^ base).to_u8
         if to_ptr.value.sibling != 0 || from_ptr.value.child != label
-          pop_sibling from, base, label
-          push_encode to
+          pop_sibling from, label
+          push_enode to
           break
         end
-        push_encode to
+        push_enode to
         to = from
       end
+      return vk
     end
 
     # 返回 -1
@@ -701,8 +756,8 @@ module Aha
     end
 
     def [](key : Bytes | Array(UInt8)) : Int32
-      ret = self[key]
-      raise IndexError.new if ret < 0
+      ret = self[key]?
+      raise IndexError.new if ret.nil?
       return ret
     end
 
@@ -761,6 +816,65 @@ module Aha
       return -1 if from == root
       from = Aha.at(@array, from_ptr.value.check).base ^ c.to_i32
       return self.begin(from)
+    end
+
+    def bfs_each(&block)
+      byte_bfs_each do |bytes, id|
+        yield KV.new(String.new(bytes.to_unsafe), id)
+      end
+    end
+
+    def dfs_each(&block)
+      byte_dfs_each do |bytes, id|
+        yield KV.new(String.new(bytes.to_unsafe), id)
+      end
+    end
+
+    def byte_each(&block)
+      byte_dfs_each do |s, id|
+        yield s, id
+      end
+    end
+
+    def each(&block)
+      dfs_each do |k|
+        yield k
+      end
+    end
+
+    def byte_bfs_each(&block)
+      queue = Deque(Int32).new
+      queue << 0
+      while queue.size > 0
+        node = queue.shift
+        yield key(node), value(node) if has_value?(node)
+        children(node) do |n|
+          queue << n.id
+        end
+      end
+    end
+
+    def byte_dfs_each(&block)
+      stack = Array(Int32).new
+      stack << 0
+      while stack.size > 0
+        node = stack[-1]
+        if has_value?(node)
+          yield key(node), value(node)
+        end
+        first_child_ = first_child node
+        if first_child_
+          stack << first_child_.id
+          next
+        end
+        sibling_ = sibling stack[-1]
+        while sibling_.nil?
+          stack.pop
+          return if stack.empty?
+          sibling_ = sibling stack[-1]
+        end
+        stack[-1] = sibling_.id
+      end
     end
 
     def save(path)
