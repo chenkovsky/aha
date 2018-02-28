@@ -132,11 +132,14 @@ module Aha
     @size : Int32
     @ordered : Bool
     @max_trial : Int32
-    @key_num : Int32
+    @leafs : Array(Int32) # 每个key 的 id对应的leaf的node的id
 
-    protected setter :array, :blocks, :reject, :bheadF, :bheadC, :bheadO, :size, :ordered, :max_trial, :key_num
+    protected setter :array, :blocks, :reject, :bheadF, :bheadC, :bheadO, :size, :ordered, :max_trial, :leafs
     protected getter :array
-    getter :key_num
+
+    def key_num
+      @leafs.size
+    end
 
     def root
       0
@@ -150,13 +153,13 @@ module Aha
       Aha.array_to_io @array, Node, io, format
       Aha.array_to_io @blocks, Block, io, format
       Aha.array_to_io @reject, Int32, io, format
+      Aha.array_to_io @leafs, Int32, io, format
       @bheadF.to_io io, format
       @bheadC.to_io io, format
       @bheadO.to_io io, format
       @size.to_io io, format
       (@ordered ? 1 : 0).to_io io, format
       @max_trial.to_io io, format
-      @key_num.to_io io, format
     end
 
     def self.from_io(io : IO, format : IO::ByteFormat) : self
@@ -164,19 +167,19 @@ module Aha
       c.array = Aha.array_from_io Node, io, format
       c.blocks = Aha.array_from_io Block, io, format
       c.reject = Aha.array_from_io Int32, io, format
+      c.leafs = Aha.array_from_io Int32, io, format
       c.bheadF = Int32.from_io io, format
       c.bheadC = Int32.from_io io, format
       c.bheadO = Int32.from_io io, format
       c.size = Int32.from_io io, format
       c.ordered = Int32.from_io(io, format) != 0
       c.max_trial = Int32.from_io io, format
-      c.key_num = Int32.from_io io, format
       return c
     end
 
     def initialize(@ordered = false)
       capacity = 256
-      @key_num = 0
+      @leafs = Array(Int32).new(capacity)
       @array = Array(Node).new(capacity)
       @blocks = Array(Block).new
       @size = capacity
@@ -580,6 +583,7 @@ module Aha
         next if flag && to_ == to_pn # 这个节点没有子节点不需要下面的操作
         n_ = Aha.pointer @array, to_
         n.value.value = n_.value.value
+        @leafs[n_.value.value] = to if n_.value.value >= 0 # 更新leaf节点信息
         n.value.flags = n_.value.flags
         if n.value.value < 0 && chl != 0
           # 更新孙子节点的父节点信息
@@ -698,17 +702,32 @@ module Aha
       return false
     end
 
+    private def has_direct_value?(id) : Bool # 当前节点就有value
+      ptr = Aha.pointer @array, id
+      val = ptr.value.value
+      val >= 0
+    end
+
+    private def has_indirect_value(id) : Bool
+      ptr = Aha.pointer @array, id
+    end
+
+    # 根据id获得string
+    def [](sid : Int32) : String
+      String.new key(@leafs[sid]).to_unsafe
+    end
+
     def insert(key : String) : Int32
       insert key.bytes
     end
 
     def insert(key : Bytes | Array(UInt8)) : Int32
       p = get key, 0, 0 # 创建节点
-      id = @key_num
+      id = @leafs.size
       p_ptr = @array.to_unsafe + p
       p_ptr.value.value = id # 设置 id
       p_ptr.value.end!
-      @key_num += 1
+      @leafs << p
       return id
     end
 
@@ -831,14 +850,14 @@ module Aha
     end
 
     def byte_each(&block)
-      byte_dfs_each do |s, id|
-        yield s, id
+      @leafs.each_with_index do |lnode, id|
+        yield key(lnode), id
       end
     end
 
     def each(&block)
-      dfs_each do |k|
-        yield k
+      byte_each do |bytes, id|
+        yield KV.new(String.new(bytes.to_unsafe), id)
       end
     end
 

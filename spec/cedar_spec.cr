@@ -16,9 +16,12 @@ describe Aha do
     ids = %w(Ruby ruby rb XX).map do |s|
       trie.insert s
     end
-    trie.to_a.map { |t| {t.key, t.value} }.should eq([{"Ruby", 0}, {"XX", 3}, {"rb", 2}, {"ruby", 1}])
     arr = [] of Tuple(String, Int32)
+    trie.dfs_each { |t| arr << ({t.key, t.value}) }
+    arr.should eq([{"Ruby", 0}, {"XX", 3}, {"rb", 2}, {"ruby", 1}])
+    arr.clear
     trie.bfs_each { |t| arr << ({t.key, t.value}) }
     arr.should eq([{"XX", 3}, {"rb", 2}, {"Ruby", 0}, {"ruby", 1}])
+    trie.to_a.map { |t| {t.key, t.value} }.should eq([{"Ruby", 0}, {"ruby", 1}, {"rb", 2}, {"XX", 3}])
   end
 end
