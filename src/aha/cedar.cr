@@ -206,6 +206,7 @@ module Aha
           # 其实完全可以一开始就新建\0 节点，现在这么做是为了节省空间
           to = follow(from, 0_u8)
           Aha.at(@array, to).value = value
+          @leafs[value] = to
         end
         from = follow(from, key[pos])
       end
