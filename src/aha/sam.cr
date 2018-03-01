@@ -7,6 +7,7 @@ module Aha
     @flags : Array(UInt8)
     @outputs : Array(Int32) # outputs
     @key_lens : Array(UInt32)
+    @keys : Array(String)
     @del_num : Int32
 
     private TRUNK_MASK = 1
@@ -45,6 +46,7 @@ module Aha
       Aha.array_to_io @flags, UInt8, io, format
       Aha.array_to_io @outputs, UInt32, io, format
       Aha.array_to_io @key_lens, UInt32, io, format
+      Aha.string_array_to_io @keys, io, format
       @del_num.to_io io, format
       @nexts.size.to_io io, format
       @nexts.each do |hs|
@@ -59,10 +61,11 @@ module Aha
       flags = Aha.array_from_io UInt8, io, format
       outputs = Aha.array_from_io Int32, io, format
       key_lens = Aha.array_from_io UInt32, io, format
+      keys = Aha.string_array_from_io io, format
       del_num = Int32.from_io io, format
       next_size = Int32.from_io io, format
       nexts = (0...next_size).map { |_| Aha.hash_from_io Char, Int32, io, format }
-      return SAM.new(lens, slinks, nmas, nexts, flags, outputs, key_lens, del_num)
+      return SAM.new(lens, slinks, nmas, nexts, flags, outputs, key_lens, keys, del_num)
     end
 
     private def create_state(len : Int32 = 0, slink : Int32 = -1, next next_ = {} of Char => Int32, flag : UInt8 = 0_u8, nmas : Int32 = -2) : Int32
@@ -84,7 +87,7 @@ module Aha
       sid
     end
 
-    def initialize(@lens, @slinks, @nmas, @nexts, @flags, @outputs, @key_lens, @del_num = 0)
+    def initialize(@lens, @slinks, @nmas, @nexts, @flags, @outputs, @key_lens, @keys, @del_num = 0)
     end
 
     def initialize
@@ -95,6 +98,7 @@ module Aha
       @flags = [] of UInt8
       @outputs = [] of Int32
       @key_lens = [] of UInt32
+      @keys = [] of String
       @del_num = 0
       create_state
     end
@@ -105,6 +109,8 @@ module Aha
     end
 
     def insert(key : String) : Int32
+      id_ = self[key]?
+      return id_ unless id_.nil?
       last = 0
       key.each_char do |chr|
         last = sa_extend chr, last
@@ -120,6 +126,7 @@ module Aha
       id = @key_lens.size
       @outputs[last] = id
       @key_lens << key.size.to_u32
+      @keys << key
       return id
     end
 
@@ -223,6 +230,16 @@ module Aha
       end
       return @outputs[sid] if marked?(sid)
       return nil
+    end
+
+    def [](key : String) : Int32
+      ret = self[key]?
+      raise IndexError.new if ret.nil?
+      return ret
+    end
+
+    def [](sid : Int32) : String
+      @keys[sid]
     end
 
     private def transition?(nid, chr) : Bool

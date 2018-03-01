@@ -28,6 +28,9 @@ module Aha
     @key_lens : Array(UInt32)
     @del_num : Int32
 
+    delegate :[], to: @da
+    delegate :[]?, to: @da
+
     def to_io(io : IO, format : IO::ByteFormat)
       @da.to_io io, format
       Aha.array_to_io @output, OutNode, io, format
