@@ -123,6 +123,7 @@ module Aha
       end
     end
 
+    @key_num : Int32
     @array : Array(Node)
     @blocks : Array(Block)
     @reject : Array(Int32)
@@ -134,11 +135,11 @@ module Aha
     @max_trial : Int32
     @leafs : Array(Int32) # 每个key 的 id对应的leaf的node的id
 
-    protected setter :array, :blocks, :reject, :bheadF, :bheadC, :bheadO, :size, :ordered, :max_trial, :leafs
+    protected setter :array, :blocks, :reject, :bheadF, :bheadC, :bheadO, :size, :ordered, :max_trial, :leafs, :key_num
     protected getter :array
 
     def key_num
-      @leafs.size
+      @key_num
     end
 
     def root
@@ -150,6 +151,7 @@ module Aha
     end
 
     def to_io(io : IO, format : IO::ByteFormat)
+      @key_num.to_io io, format
       Aha.array_to_io @array, Node, io, format
       Aha.array_to_io @blocks, Block, io, format
       Aha.array_to_io @reject, Int32, io, format
@@ -164,6 +166,7 @@ module Aha
 
     def self.from_io(io : IO, format : IO::ByteFormat) : self
       c = Cedar.new
+      c.key_num = Int32.from_io io, format
       c.array = Aha.array_from_io Node, io, format
       c.blocks = Aha.array_from_io Block, io, format
       c.reject = Aha.array_from_io Int32, io, format
@@ -179,6 +182,7 @@ module Aha
 
     def initialize(@ordered = false)
       capacity = 256
+      @key_num = 0
       @leafs = Array(Int32).new(capacity)
       @array = Array(Node).new(capacity)
       @blocks = Array(Block).new
@@ -729,6 +733,7 @@ module Aha
       p_ptr.value.value = id # 设置 id
       p_ptr.value.end!
       @leafs << p
+      @key_num += 1
       return id
     end
 
@@ -763,6 +768,8 @@ module Aha
         push_enode to
         to = from
       end
+      @key_num -= 1
+      @leafs[vk] = -1
       return vk
     end
 
@@ -852,7 +859,7 @@ module Aha
 
     def byte_each(&block)
       @leafs.each_with_index do |lnode, id|
-        yield key(lnode), id
+        yield key(lnode), id if id >= 0
       end
     end
 
@@ -904,11 +911,9 @@ module Aha
     end
 
     def self.load(path)
-      da = Cedar.new
       File.open(path, "rb") do |f|
-        da.from_io f, IO::ByteFormat::LittleEndian
+        return Cedar.from_io f, IO::ByteFormat::LittleEndian
       end
-      da
     end
   end
 end
