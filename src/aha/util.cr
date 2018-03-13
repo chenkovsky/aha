@@ -117,6 +117,10 @@ module Aha
     c = ((v + (v >> 4) & 0xF0F0F0F) * 0x1010101) >> 24
   end
 
+  def self.is_power_of_two(v : UInt64)
+    value != 0 && (value & (value - 1)) == 0
+  end
+
   MultiplyDeBruijnBitPosition2 = [
     0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
     31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9,
