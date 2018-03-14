@@ -12,28 +12,28 @@ module Aha
       (x << r) | (x >> (32 - r))
     end
 
-    def hash(x : Bytes | Array(UInt8)) : UInt32
-      hash(x.to_unsafe, x.size)
+    def self.hash(x : Bytes | Array(UInt8)) : UInt32
+      hash(x.to_unsafe, x.size.to_u64)
     end
 
-    def hash(data : Pointer(UInt8), len_ : UInt64) : UInt32
+    def self.hash(data : Pointer(UInt8), len_ : UInt64) : UInt32
       len = len_.to_i32
       nblock = len / 4
 
       h1 = 0xc062fb4a_u32
       c1 = 0xcc9e2d51_u32
       c2 = 0x1b873593_u32
-      blocks = (data + nblocks * 4).as(Pointer(UInt32))
-      (1..-nblocks).reverse_each do |i|
+      blocks = (data + nblock * 4).as(Pointer(UInt32))
+      (1..-nblock).reverse_each do |i|
         k1 = blocks[i]
         k1 *= c1
-        k1 = rotl32 k1, 15
+        k1 = rotl32 k1, 15_i8
         k1 *= c2
         h1 ^= k1
-        h1 = rotl32 h1, 13
+        h1 = rotl32 h1, 13_i8
         h1 = h1 * 5 + 0xe6546b64
       end
-      tail = (data + nblocks*4)
+      tail = (data + nblock*4)
       k1 = 0_u32
       case len & 3
       when 3
@@ -43,7 +43,7 @@ module Aha
       when 1
         k1 ^= tail[0]
         k1 *= c1
-        k1 = rotl32(k1, 15)
+        k1 = rotl32 k1, 15_i8
         k1 *= c2
         h1 ^= k1
       end

@@ -177,13 +177,13 @@ module Aha
 
     def save(path)
       File.open(path, "wb") do |f|
-        to_io f, IO::ByteFormat::LittleEndian
+        to_io f, Aha::ByteFormat
       end
     end
 
     def self.load(path)
       File.open(path, "rb") do |f|
-        return SAM.from_io f, IO::ByteFormat::LittleEndian
+        return SAM.from_io f, Aha::ByteFormat
       end
     end
 

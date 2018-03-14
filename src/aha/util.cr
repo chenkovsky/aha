@@ -1,4 +1,6 @@
 module Aha
+  ByteFormat = IO::ByteFormat::LittleEndian
+
   macro pointer(arr, idx)
     ({{arr}}.to_unsafe + ({{idx}}))
   end
