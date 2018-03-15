@@ -197,7 +197,7 @@ module Aha
       return Pointer(UInt8).null
     end
 
-    private def get(key : Bytes | Array(UInt8))
+    def get(key : Bytes | Array(UInt8))
       if key.size > 32767
         raise "HAT-trie/AH-table cannot store keys longer than 32768"
       end
@@ -241,11 +241,11 @@ module Aha
       return ret
     end
 
-    private def try_get(key : Bytes | Array(UInt8)) : UInt8*
+    def try_get(key : Bytes | Array(UInt8)) : UInt8*
       get_key(key, false)
     end
 
-    private def delete(key : Bytes | Array(UInt8))
+    def delete(key : Bytes | Array(UInt8)) : Bool
       i = MurMur.hash(key) % @n
       s_start = s = @slots[i]
       slot_size = @slot_sizes[i]
@@ -263,21 +263,23 @@ module Aha
           s.move_from(t, slot_size - (t - s_start))
           @slot_sizes[i] -= t - s
           @m -= 1
-          return 0
+          return true
         end
         s += k + N
         next
       end
-      return -1
+      return false
     end
 
     def each(sorted : Bool)
       if sorted
-        arr = [] of Bytes
-        each do |k, v|
-          arr << (KV.new k, v)
+        arr = [] of KV
+        each do |kv|
+          arr << kv
         end
-        arr.sort_by! { |e| e.key }
+        arr.sort! do |e1, e2|
+          Aha.bytes_cmp(e1.key, e2.key)
+        end
         arr.each do |kv|
           yield kv
         end

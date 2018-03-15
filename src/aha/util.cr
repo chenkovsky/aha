@@ -174,4 +174,16 @@ module Aha
     arr[place] = target
     return place
   end
+
+  def self.bytes_cmp(b1 : Bytes, b2 : Bytes)
+    len = b1.size
+    len = b2.size if b2.size < b1.size
+    (0...len).each do |i|
+      cmp = b1[i] <=> b2[i]
+      return cmp if cmp != 0
+    end
+    return 0 if b1.size == b2.size
+    return 1 if b1.size > b2.size
+    return -1
+  end
 end
