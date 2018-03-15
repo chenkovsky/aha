@@ -174,7 +174,7 @@ module Aha
 
     def self.load(path)
       File.open(path, "rb") do |f|
-        return AC.from_io f, Aha::ByteFormat
+        return self.from_io f, Aha::ByteFormat
       end
     end
   end

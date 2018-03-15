@@ -1,6 +1,6 @@
 module Aha
   # an open address hash table
-  struct ArrayHash(N) # N is the byte num of value
+  class ArrayHash(N) # N is the byte num of value
     struct KV
       @key : Bytes
       @value : Bytes
@@ -74,7 +74,7 @@ module Aha
       if padding != 4
         (0...padding).each { |_| UInt8.from_io io, format }
       end
-      return self.new(n, m, max_m, slot_sizes, slots)
+      return self.new(n, m, max_m, slot_sizes, slots.to_unsafe)
     end
 
     def initialize(@n, @m, @max_m, @slot_sizes, @slots)
@@ -241,7 +241,7 @@ module Aha
       return ret
     end
 
-    private def try_get(key : Bytes | Array(UInt8))
+    private def try_get(key : Bytes | Array(UInt8)) : UInt8*
       get_key(key, false)
     end
 
@@ -313,7 +313,7 @@ module Aha
 
     def self.load(path)
       File.open(path, "rb") do |f|
-        return ArrayHash.from_io f, Aha::ByteFormat
+        return self.from_io f, Aha::ByteFormat
       end
     end
   end
