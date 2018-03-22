@@ -470,7 +470,7 @@ module Aha
 
     private def set_child(base : Int32, c : UInt8, label : UInt8, append_label : Bool) : Array(UInt8)
       children = Array(UInt8).new(257)
-      if label == 0
+      if c == 0
         children << c
         c = Aha.at(@array, base ^ c.to_i32).sibling
       end
@@ -687,6 +687,7 @@ module Aha
     end
 
     # 返回 这个节点的value值，已占用节点的value值就是key的idx
+    # < 0 就是没有 value
     protected def value(id) : Int32
       ptr = Aha.pointer @array, id
       val = ptr.value.value
@@ -694,7 +695,7 @@ module Aha
       to = ptr.value.base
       to_ptr = Aha.pointer @array, to
       return to_ptr.value.value if to_ptr.value.check == id && to_ptr.value.value >= 0
-      raise "no value"
+      return -1
     end
 
     protected def has_value?(id) : Bool
@@ -727,6 +728,8 @@ module Aha
     end
 
     def insert(key : Bytes | Array(UInt8)) : Int32
+      id = self[key]?
+      return id unless id.nil?
       p = get key, 0, 0 # 创建节点
       id = @leafs.size
       p_ptr = @array.to_unsafe + p
