@@ -135,7 +135,7 @@ module Aha
       slot_sizes = Pointer(UInt64).malloc(new_n, 0_u64)
 
       each do |kv|
-        slot_sizes[MurMur.hash(kv.key) % new_n] += kv.key.size + N + (kv.key.size >= 128 ? 2 : 1)
+        slot_sizes[(kv.key.hash) % new_n] += kv.key.size + N + (kv.key.size >= 128 ? 2 : 1)
       end
       slots = Pointer(Slot).malloc(new_n)
       (0...new_n).each do |j|
@@ -151,7 +151,7 @@ module Aha
       h = 0_u64
       u = Pointer(UInt8).null
       each do |kv|
-        h = MurMur.hash(kv.key) % new_n
+        h = (kv.key.hash) % new_n
         slots_next[h] = ins_key(slots_next[h], kv.key, pointerof(u))
         kv.value.copy_to(u, kv.value.size)
       end
@@ -164,7 +164,7 @@ module Aha
     private def get_key(key : Bytes | Array(UInt8), insert_missing : Bool) : UInt8*
       expand if insert_missing && @m >= @max_m
       len = key.size
-      i = MurMur.hash(key) % @n
+      i = (key.hash) % @n
       s_start = s = @slots[i]
       slot_size = @slot_sizes[i]
       val = Pointer(UInt8).null
@@ -246,7 +246,7 @@ module Aha
     end
 
     def delete(key : Bytes | Array(UInt8)) : Bool
-      i = MurMur.hash(key) % @n
+      i = key.hash % @n
       s_start = s = @slots[i]
       slot_size = @slot_sizes[i]
       while (s - s_start) < slot_size

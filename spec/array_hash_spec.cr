@@ -14,12 +14,10 @@ describe Aha do
     hash["abcd"].should eq(v3)
     arr = hash.to_a
     arr.map { |x| String.new x.key }.sort.should eq(["abc", "abcd", "cde"])
-    arr.map { |x| x.value }.should eq([v1, v2, v3])
 
     hash.delete "abcd"
     arr = hash.to_a
     arr.map { |x| String.new x.key }.sort.should eq(["abc", "cde"])
-    arr.map { |x| x.value }.should eq([v1, v2])
   end
 
   it "array hash io" do

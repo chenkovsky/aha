@@ -304,7 +304,7 @@ module Aha
       bi = e >> 8
       n = Aha.pointer @array, e
       b = Aha.pointer @blocks, bi
-      b.value.num -= 1 # 该block中剩余的slot数目减少
+      b.value.num = b.value.num - 1 # 该block中剩余的slot数目减少
       if b.value.num == 0
         # O 队列 > 1 个 slot
         # C 队列 = 1 个 slot
@@ -335,7 +335,7 @@ module Aha
       e_ptr = Aha.pointer @array, e
       bi = e >> 8
       b = Aha.pointer @blocks, bi
-      b.value.num += 1
+      b.value.num = b.value.num + 1
       if b.value.num == 1
         # 如果 block 中原来没有slot。现在有了
         # 从 F 链 放入 C 链
@@ -534,7 +534,7 @@ module Aha
             @reject[b.value.num] = b.value.reject
           end
           bin = b.value.next
-          b.value.trial += 1 # 尝试失败的次数增加
+          b.value.trial = b.value.trial + 1 # 尝试失败的次数增加
           if b.value.trial == @max_trial
             # 尝试失败的次数太多，放入 C 队列
             transfer_block bi, pointerof(@bheadO), pointerof(@bheadC)
@@ -588,7 +588,7 @@ module Aha
         next if flag && to_ == to_pn # 这个节点没有子节点不需要下面的操作
         n_ = Aha.pointer @array, to_
         n.value.value = n_.value.value
-        @leafs[n_.value.value] = to if n_.value.value >= 0 # 更新leaf节点信息
+        @leafs[n_.value.value] = to if n_.value.value >= 0 && n_.value.value != VALUE_LIMIT # 更新leaf节点信息
         n.value.flags = n_.value.flags
         if n.value.value < 0 && chl != 0
           # 更新孙子节点的父节点信息
@@ -694,7 +694,7 @@ module Aha
       return val if val >= 0
       to = ptr.value.base
       to_ptr = Aha.pointer @array, to
-      return to_ptr.value.value if to_ptr.value.check == id && to_ptr.value.value >= 0
+      return to_ptr.value.value if to_ptr.value.check == id && to_ptr.value.value >= 0 && to_ptr.value.value != VALUE_LIMIT
       return -1
     end
 
@@ -728,11 +728,10 @@ module Aha
     end
 
     def insert(key : Bytes | Array(UInt8)) : Int32
-      id = self[key]?
-      return id unless id.nil?
       p = get key, 0, 0 # 创建节点
       id = @leafs.size
       p_ptr = @array.to_unsafe + p
+      return p_ptr.value.value if p_ptr.value.end? && p_ptr.value.value != VALUE_LIMIT
       p_ptr.value.value = id # 设置 id
       p_ptr.value.end!
       @leafs << p
