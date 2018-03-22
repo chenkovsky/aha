@@ -289,4 +289,28 @@ TXT
       trie[i].should eq(x)
     end
   end
+  it "prefix suffix" do
+    trie = Aha::Cedar.new
+    trie.insert "Polite_pol"
+    trie.insert "polite"
+    File.open("tmp.dot", "w") do |f|
+      f.puts trie.to_dot
+    end
+    trie.to_dot
+    arr = [] of String
+    trie.prefix "Polite_pol", true do |k, _|
+      arr << trie[k]
+    end
+    arr.should eq(["polite", "Polite_pol"])
+    arr.clear
+    trie.predict "Polite", true do |k, _|
+      arr << trie[k]
+    end
+    arr.should eq(["polite", "Polite_pol"])
+    arr.clear
+    trie.exact "Polite", true do |k, _|
+      arr << trie[k]
+    end
+    arr.should eq(["polite"])
+  end
 end

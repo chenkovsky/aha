@@ -921,5 +921,120 @@ module Aha
         return self.from_io f, Aha::ByteFormat
       end
     end
+
+    private def jump(chr : Char, from : Int32 = 0) : Int32 # 小于 0 说明没有路径
+      chr.each_byte do |byte|
+        from = jump byte, from
+        return -1 if from < 0
+      end
+      return from
+    end
+
+    # yield string_id, consumed_char_num
+    def exact(s : String, ignore_case : Bool, limit : Int32 = -1)
+      return if limit == 0
+      queue = [0] # queue of node_id
+      new_queue = [] of Int32
+      char_num = 0
+      s.each_char do |chr|
+        char_num += 1
+        other_char = chr
+        other_char = chr.uppercase? ? chr.downcase : chr.upcase if ignore_case
+        queue.each do |node|
+          new_node = jump chr, node
+          new_queue << new_node if new_node >= 0
+          if ignore_case
+            new_node = jump other_char, node
+            new_queue << new_node if new_node >= 0
+          end
+        end
+        new_queue, queue = queue, new_queue
+        new_queue.clear
+      end
+      num = 0
+      queue.each do |to|
+        break if limit >= 0 && num >= limit
+        vk = value to
+        yield vk, char_num if vk >= 0
+        num += 1
+      end
+    end
+
+    def prefix(s : String, ignore_case : Bool, limit : Int32 = -1)
+      return if limit == 0
+      queue = [0] # queue of node_id
+      new_queue = [] of Int32
+      char_num = 0
+      num = 0
+      s.each_char do |chr|
+        char_num += 1
+        other_char = chr
+        other_char = chr.uppercase? ? chr.downcase : chr.upcase if ignore_case
+        queue.each do |node|
+          new_node = jump chr, node
+          if new_node >= 0
+            new_queue << new_node
+            vk = value new_node
+            if vk >= 0
+              yield vk, char_num
+              num += 1
+              break if limit >= 0 && num >= limit
+            end
+          end
+          if ignore_case && other_char != chr
+            new_node = jump other_char, node
+            if new_node >= 0
+              new_queue << new_node
+              vk = value new_node
+              if vk >= 0
+                yield vk, char_num
+                num += 1
+                break if limit >= 0 && num >= limit
+              end
+            end
+          end
+        end
+        new_queue, queue = queue, new_queue
+        new_queue.clear
+      end
+    end
+
+    #  bfs 的顺序输出的
+    def predict(s : String, ignore_case : Bool, limit : Int32 = -1)
+      return if limit == 0
+      queue = [0] # queue of node_id
+      new_queue = [] of Int32
+      char_num = 0
+      s.each_char do |chr|
+        char_num += 1
+        other_char = chr
+        other_char = chr.uppercase? ? chr.downcase : chr.upcase if ignore_case
+        queue.each do |node|
+          new_node = jump chr, node
+          new_queue << new_node if new_node >= 0
+          if ignore_case
+            new_node = jump other_char, node
+            new_queue << new_node if new_node >= 0
+          end
+        end
+        new_queue, queue = queue, new_queue
+        new_queue.clear
+      end
+      num = 0
+      while !queue.empty?
+        queue.each do |to|
+          vk = value to
+          yield vk, char_num if vk >= 0
+          num += 1
+          break if limit >= 0 && num >= limit
+          children(to) do |nd|
+            new_queue << nd.id
+          end
+        end
+        break if limit >= 0 && num >= limit
+        new_queue, queue = queue, new_queue
+        new_queue.clear
+      end
+    end
   end
 end
