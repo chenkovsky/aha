@@ -773,6 +773,10 @@ module Aha
       return vk
     end
 
+    def []?(key : String) : Int32?
+      self[key.to_slice]?
+    end
+
     # 返回 -1
     def []?(key : Bytes | Array(UInt8)) : Int32?
       to = jump key, 0
@@ -782,7 +786,7 @@ module Aha
       return vk
     end
 
-    def [](key : Bytes | Array(UInt8)) : Int32
+    def [](key : Bytes | Array(UInt8) | String) : Int32
       ret = self[key]?
       raise IndexError.new if ret.nil?
       return ret
