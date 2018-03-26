@@ -1,15 +1,6 @@
 module Aha
   class Cedar
-    struct KV
-      @key : String
-      @value : Int32
-      getter :key, :value
-
-      def initialize(@key, @value)
-      end
-    end
-
-    include Enumerable(KV)
+    include Enumerable({String, Int32})
     VALUE_LIMIT = (1 << 31) - 1
 
     struct NodeDesc
@@ -663,7 +654,7 @@ module Aha
       path.each_with_index do |byte, idx|
         from = jump byte, from
         return -1 if from < 0
-        yield from, idx
+        yield({from, idx})
       end
       return from
     end
@@ -853,25 +844,25 @@ module Aha
 
     def bfs_each(&block)
       byte_bfs_each do |bytes, id|
-        yield KV.new(String.new(bytes.to_unsafe), id)
+        yield({String.new(bytes.to_unsafe), id})
       end
     end
 
     def dfs_each(&block)
       byte_dfs_each do |bytes, id|
-        yield KV.new(String.new(bytes.to_unsafe), id)
+        yield({String.new(bytes.to_unsafe), id})
       end
     end
 
     def byte_each(&block)
       @leafs.each_with_index do |lnode, id|
-        yield key(lnode), id if id >= 0
+        yield({key(lnode), id}) if id >= 0
       end
     end
 
     def each(&block)
       byte_each do |bytes, id|
-        yield KV.new(String.new(bytes.to_unsafe), id)
+        yield({String.new(bytes.to_unsafe), id})
       end
     end
 
@@ -880,7 +871,7 @@ module Aha
       queue << 0
       while queue.size > 0
         node = queue.shift
-        yield key(node), value(node) if has_value?(node)
+        yield({key(node), value(node)}) if has_value?(node)
         children(node) do |n|
           queue << n.id
         end
@@ -893,7 +884,7 @@ module Aha
       while stack.size > 0
         node = stack[-1]
         if has_value?(node)
-          yield key(node), value(node)
+          yield({key(node), value(node)})
         end
         first_child_ = first_child node
         if first_child_
@@ -955,7 +946,7 @@ module Aha
       queue.each do |to|
         break if limit >= 0 && num >= limit
         vk = value to
-        yield vk, char_num if vk >= 0
+        yield({vk, char_num}) if vk >= 0
         num += 1
       end
     end
@@ -976,7 +967,7 @@ module Aha
             new_queue << new_node
             vk = value new_node
             if vk >= 0
-              yield vk, char_num
+              yield({vk, char_num})
               num += 1
               break if limit >= 0 && num >= limit
             end
@@ -987,7 +978,7 @@ module Aha
               new_queue << new_node
               vk = value new_node
               if vk >= 0
-                yield vk, char_num
+                yield({vk, char_num})
                 num += 1
                 break if limit >= 0 && num >= limit
               end
@@ -1024,7 +1015,7 @@ module Aha
       while !queue.empty?
         queue.each do |to|
           vk = value to
-          yield vk, char_num if vk >= 0
+          yield({vk, char_num}) if vk >= 0
           num += 1
           break if limit >= 0 && num >= limit
           children(to) do |nd|

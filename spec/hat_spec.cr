@@ -16,8 +16,8 @@ describe Aha do
     trie["abc"].should eq(v3)
     trie["abcd"].should eq(v4)
     arr = [] of String
-    trie.each do |kv|
-      arr << (String.new kv.key)
+    trie.each do |key, _|
+      arr << (String.new key)
     end
     arr.sort.should eq(["ab", "abc", "abcd", "bc"])
   end

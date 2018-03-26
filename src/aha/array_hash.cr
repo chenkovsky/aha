@@ -1,16 +1,8 @@
 module Aha
   # an open address hash table
   class ArrayHash(N) # N is the byte num of value
-    struct KV
-      @key : Bytes
-      @value : Bytes
-      getter :key, :value
 
-      def initialize(@key, @value)
-      end
-    end
-
-    include Enumerable(KV)
+    include Enumerable({Bytes, Bytes})
     alias Slot = UInt8*
 
     @n : UInt64     # number of slots
@@ -134,8 +126,8 @@ module Aha
       new_n = @n << 1
       slot_sizes = Pointer(UInt64).malloc(new_n, 0_u64)
 
-      each do |kv|
-        slot_sizes[(kv.key.hash) % new_n] += kv.key.size + N + (kv.key.size >= 128 ? 2 : 1)
+      each do |k, v|
+        slot_sizes[(k.hash) % new_n] += k.size + N + (k.size >= 128 ? 2 : 1)
       end
       slots = Pointer(Slot).malloc(new_n)
       (0...new_n).each do |j|
@@ -150,10 +142,10 @@ module Aha
       slots_next.copy_from(slots, new_n)
       h = 0_u64
       u = Pointer(UInt8).null
-      each do |kv|
-        h = (kv.key.hash) % new_n
-        slots_next[h] = ins_key(slots_next[h], kv.key, pointerof(u))
-        kv.value.copy_to(u, kv.value.size)
+      each do |k, v|
+        h = (k.hash) % new_n
+        slots_next[h] = ins_key(slots_next[h], k, pointerof(u))
+        v.copy_to(u, v.size)
       end
       @slots = slots
       @slot_sizes = slot_sizes
@@ -273,12 +265,12 @@ module Aha
 
     def each(sorted : Bool)
       if sorted
-        arr = [] of KV
+        arr = [] of {Bytes, Bytes}
         each do |kv|
           arr << kv
         end
         arr.sort! do |e1, e2|
-          Aha.bytes_cmp(e1.key, e2.key)
+          Aha.bytes_cmp(e1[0], e2[0])
         end
         arr.each do |kv|
           yield kv
@@ -302,7 +294,7 @@ module Aha
           s += k
           val = s.as(UInt8*)
           s += N
-          yield KV.new key, Bytes.new(val, N)
+          yield({key, Bytes.new(val, N)})
         end
       end
     end

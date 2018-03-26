@@ -3,8 +3,7 @@ require "./array_hash"
 module Aha
   # 动态的trie，可以存储任意bytes
   class Hat(N) # N 是 value的byte数
-    alias KV = ArrayHash::KV
-    include Enumerable(KV)
+    include Enumerable({Bytes, Bytes})
 
     class TrieNode(N)
       @has_val : Bool
@@ -152,7 +151,7 @@ module Aha
       # count the number of occourances of every leading character
 
       cs = StaticArray(UInt32, NODE_CHILDS).new(0_u32)
-      node.each { |kv| cs[kv.key[0]] += 1 }
+      node.each { |k, v| cs[k[0]] += 1 }
 
       # choose a split point
       j = node.c0 # c0 是最小的子节点的char, c1 是最大
@@ -198,14 +197,14 @@ module Aha
 
       (node.c0..j).each { |c| parent.xs[c] = left }
       ((j + 1)..node.c1).each { |c| parent.xs[c] = right }
-      node.each do |kv|
-        cur_node = kv.key[0] <= j ? left : right
+      node.each do |key, value|
+        cur_node = key[0] <= j ? left : right
         if cur_node.pure?
-          v = cur_node.get(kv.key + 1)
+          v = cur_node.get(key + 1)
         else
-          v = cur_node.get(kv.key)
+          v = cur_node.get(key)
         end
-        kv.value.copy_to(v, kv.value.size)
+        value.copy_to(v, value.size)
       end
     end
 
@@ -341,7 +340,7 @@ module Aha
         if node.is_a? TrieNode(N)
           push_char key, level, c
           if node.has_val?
-            yield KV.new(Bytes.new(key.size) { |i| key[i] }, Bytes.new(N) { |i| node.val[i] })
+            yield Bytes.new(key.size) { |i| key[i] }, Bytes.new(N) { |i| node.val[i] }
           end
           stack = stack.next
           (0..NODE_MAXCHAR).reverse_each do |j|
@@ -356,7 +355,7 @@ module Aha
             level -= 1
           end
           node.each(sorted) do |kv|
-            yield KV.new(merge_chars(key, kv.key), Bytes.new(N) { |i| kv.value[i] })
+            yield merge_chars(key, kv[0]), Bytes.new(N) { |i| kv[1][i] }
           end
           stack = stack.next # 没有子节点了
         end

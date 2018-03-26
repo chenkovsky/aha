@@ -13,11 +13,11 @@ describe Aha do
     hash["cde"].should eq(v2)
     hash["abcd"].should eq(v3)
     arr = hash.to_a
-    arr.map { |x| String.new x.key }.sort.should eq(["abc", "abcd", "cde"])
+    arr.map { |k, _| String.new k }.sort.should eq(["abc", "abcd", "cde"])
 
     hash.delete "abcd"
     arr = hash.to_a
-    arr.map { |x| String.new x.key }.sort.should eq(["abc", "cde"])
+    arr.map { |k, _| String.new k }.sort.should eq(["abc", "cde"])
   end
 
   it "array hash io" do
