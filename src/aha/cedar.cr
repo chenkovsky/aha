@@ -951,13 +951,14 @@ module Aha
       end
     end
 
-    def prefix(s : String, ignore_case : Bool, limit : Int32 = -1)
+    {% for name, idx in ["String", "Array(Char)", "Slice(Char)"] %}
+    def prefix(s : {{name.id}}, ignore_case : Bool, limit : Int32 = -1)
       return if limit == 0
       queue = [0] # queue of node_id
       new_queue = [] of Int32
       char_num = 0
       num = 0
-      s.each_char do |chr|
+      s.each{{name == "String" ? "_char".id : "".id}} do |chr|
         char_num += 1
         other_char = chr
         other_char = chr.uppercase? ? chr.downcase : chr.upcase if ignore_case
@@ -989,6 +990,7 @@ module Aha
         new_queue.clear
       end
     end
+    {% end %}
 
     #  bfs 的顺序输出的
     def predict(s : String, ignore_case : Bool, limit : Int32 = -1)
