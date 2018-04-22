@@ -287,6 +287,7 @@ TXT
     trie.size.should eq(lines.size)
     lines.each_with_index do |x, i|
       trie[i].should eq(x)
+      trie[x].should eq(i)
     end
   end
   it "prefix suffix" do
