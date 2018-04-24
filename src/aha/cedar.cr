@@ -133,6 +133,10 @@ module Aha
       @key_num
     end
 
+    def size
+      @key_num
+    end
+
     def root
       0
     end
