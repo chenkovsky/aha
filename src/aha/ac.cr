@@ -1,10 +1,13 @@
 module Aha
   # 如果找不到子节点，每次都去fail节点查看有没有相对应的子节点。
   # 相应的，如果找到了end节点，也需要将fail节点的out values加入
-  class AC
-    struct OutNode
-      @next : Int32
-      @value : Int32
+  alias AC = ACX(Int32)
+  alias ACBig = ACX(Int64)
+
+  class ACX(T)
+    struct OutNode(T)
+      @next : T
+      @value : T
       property :value, :next
 
       def initialize(@next, @value)
@@ -16,15 +19,15 @@ module Aha
       end
 
       def self.from_io(io : IO, format : IO::ByteFormat) : self
-        next_ = Int32.from_io io, format
-        value = Int32.from_io io, format
-        return OutNode.new(next_, value)
+        next_ = T.from_io io, format
+        value = T.from_io io, format
+        return OutNode(T).new(next_, value)
       end
     end
 
-    @da : Cedar
-    @output : Array(OutNode)
-    @fails : Array(Int32)
+    @da : CedarX(T)
+    @output : Array(OutNode(T))
+    @fails : Array(T)
     @key_lens : Array(UInt32)
     @del_num : Int32
 
@@ -33,23 +36,23 @@ module Aha
 
     def to_io(io : IO, format : IO::ByteFormat)
       @da.to_io io, format
-      Aha.array_to_io @output, OutNode, io, format
-      Aha.array_to_io @fails, Int32, io, format
+      Aha.array_to_io @output, OutNode(T), io, format
+      Aha.array_to_io @fails, T, io, format
       Aha.array_to_io @key_lens, UInt32, io, format
       @del_num.to_io io, format
     end
 
-    def self.from_io(io : IO, format : IO::ByteFormat) : AC
-      da = Cedar.from_io io, format
-      output = Aha.array_from_io OutNode, io, format
-      fails = Aha.array_from_io Int32, io, format
+    def self.from_io(io : IO, format : IO::ByteFormat) : self
+      da = CedarX(T).from_io io, format
+      output = Aha.array_from_io OutNode(T), io, format
+      fails = Aha.array_from_io T, io, format
       key_lens = Aha.array_from_io UInt32, io, format
       del_num = Int32.from_io io, format
-      AC.new(da, output, fails, key_lens, del_num)
+      ACX(T).new(da, output, fails, key_lens, del_num)
     end
 
-    def self.compile(keys : Array(String) | Array(Array(UInt8)) | Array(Bytes)) : AC
-      da = Cedar.new
+    def self.compile(keys : Array(String) | Array(Array(UInt8)) | Array(Bytes)) : self
+      da = CedarX(T).new
       keys.each_with_index do |key, idx|
         kid = da.insert key
         raise "key:#{key} appear twice." if kid != idx
@@ -57,13 +60,11 @@ module Aha
       self.compile da
     end
 
-    alias NodeDesc = NamedTuple(node: Cedar::NodeDesc(Int32), len: Int32)
-
-    def self.compile(da : Cedar) : AC
+    def self.compile(da : CedarX(T)) : AC
       nlen = da.array_size
-      fails = Array(Int32).new(nlen, -1)
-      output = Array(OutNode).new(nlen, OutNode.new(-1, -1))
-      q = Deque(NodeDesc).new
+      fails = Array(T).new(nlen, -1)
+      output = Array(OutNode(T)).new(nlen, OutNode(T).new(-1, -1))
+      q = Deque(NamedTuple(node: Cedar::NodeDesc(T), len: Int32)).new
       key_lens = Array(UInt32).new(da.key_num, 0_u32)
       ro = 0
       fails[ro] = ro
@@ -138,7 +139,7 @@ module Aha
       @key_lens - @del_num
     end
 
-    def delete(kid : Int32)
+    def delete(kid : T)
       @del_num += 1 if (@key_lens[kid] & DELETE_MASK) == 0
       @key_lens[kid] ||= DELETE_MASK
     end
