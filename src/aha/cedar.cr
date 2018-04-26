@@ -121,9 +121,10 @@ module Aha
     end
 
     @key_num : T
+    @key_capacity : T
     @array : Pointer(Node(T))
     @blocks : Pointer(Block(T))
-    @reject : Array(Int32)
+    @reject : StaticArray(Int32, 257)
     @bheadF : T
     @bheadC : T
     @bheadO : T
@@ -131,9 +132,10 @@ module Aha
     @capacity : T
     @ordered : Bool
     @max_trial : Int32
-    @leafs : Array(T) # 每个key 的 id对应的leaf的node的id
+    @leafs : Pointer(T) # 每个key 的 id对应的leaf的node的id
+    @leaf_size : T
 
-    protected setter :array, :blocks, :reject, :bheadF, :bheadC, :bheadO, :array_size, :ordered, :max_trial, :leafs, :key_num, :capacity
+    protected setter :array, :blocks, :reject, :bheadF, :bheadC, :bheadO, :array_size, :ordered, :max_trial, :leafs, :key_num, :capacity, :key_capacity
     protected getter :array, :array_size, :capacity
 
     def key_num
@@ -153,11 +155,10 @@ module Aha
     end
 
     def to_io(io : IO, format : IO::ByteFormat)
-      @key_num.to_io io, format
       Aha.ptr_to_io @array, @array_size, Node(T), io, format
       Aha.ptr_to_io @blocks, (@array_size >> 8), Block(T), io, format
-      Aha.array_to_io @reject, Int32, io, format
-      Aha.array_to_io @leafs, T, io, format
+      @reject.each { |r| r.to_io io, format }
+      Aha.ptr_to_io @leafs, (@key_num), T, io, format
       @bheadF.to_io io, format
       @bheadC.to_io io, format
       @bheadO.to_io io, format
@@ -167,13 +168,14 @@ module Aha
 
     def self.from_io(io : IO, format : IO::ByteFormat) : self
       c = Cedar.new
-      c.key_num = T.from_io io, format
       c.array, array_size, capacity = Aha.ptr_from_io Node(T), io, format, Math.pw2ceil
       c.array_size = T.new(array_size)
       c.capacity = T.new(capacity)
       c.blocks, _ = Aha.ptr_from_io Block(T), io, format, Math.pw2ceil
-      c.reject = Aha.array_from_io Int32, io, format
-      c.leafs = Aha.array_from_io T, io, format
+      c.reject = StaticArray(Int32, 257).new { |i| Int32.from_io io, format }
+      c.leafs, key_num, key_capacity = Aha.ptr_from_io T, io, format, Math.pw2ceil
+      c.key_num = T.new(key_num)
+      c.key_capacity = T.new(key_capacity)
       c.bheadF = T.from_io io, format
       c.bheadC = T.from_io io, format
       c.bheadO = T.from_io io, format
@@ -187,7 +189,9 @@ module Aha
 
       @capacity = T.new(256)
       @key_num = T.new(0)
-      @leafs = Array(T).new(@capacity)
+      @leaf_size = T.new(0)
+      @key_capacity = @capacity
+      @leafs = Pointer(T).malloc(@key_capacity)
       @array = Pointer(Node(T)).malloc(@capacity)
       @array_size = @capacity
       @blocks = Pointer(Block(T)).malloc(@capacity >> 8)
@@ -198,7 +202,7 @@ module Aha
       Aha.at(@array, 1).value = T.new(-255)
       Aha.at(@array, 255).check = T.new(-1)
       @blocks[0] = Block(T).new(T.new(0), T.new(0), 0, T.new(1))
-      @reject = (0..256).map { |i| i + 1 }
+      @reject = StaticArray(Int32, 257).new { |i| i + 1 }
       @bheadF = T.new(0)
       @bheadC = T.new(0)
       @bheadO = T.new(0)
@@ -739,12 +743,17 @@ module Aha
 
     def insert(key : Bytes | Array(UInt8)) : T
       p = get key, T.new(0), T.new(0) # 创建节点
-      id = T.new(@leafs.size)         # @TODO 替代 array后换掉
+      id = T.new(@leaf_size)          # @TODO 替代 array后换掉
       p_ptr = Aha.pointer(@array, p)
       return p_ptr.value.value if p_ptr.value.end? && p_ptr.value.value != self.class.value_limit
       p_ptr.value.value = id # 设置 id
       p_ptr.value.end!
-      @leafs << p
+      if @key_num == @key_capacity
+        @key_capacity *= 2
+        @leafs = @leafs.realloc(@key_capacity)
+      end
+      @leafs[@leaf_size] = p
+      @leaf_size += 1
       @key_num += 1
       return id
     end
@@ -874,7 +883,8 @@ module Aha
     end
 
     def byte_each(&block)
-      @leafs.each_with_index do |lnode, id|
+      (0...@leaf_size).each do |id|
+        lnode = @leafs[id]
         yield({key(lnode), T.new(id)}) if id >= 0 # @TODO 替换 array 后, 替换
       end
     end
