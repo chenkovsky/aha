@@ -39,7 +39,7 @@ module Aha
   end
 
   macro ptr_to_io(arr, size, type_, io, format)
-    {{size}}.to_io {{io}}, {{format}}
+    ({{size}}).to_i64.to_io {{io}}, {{format}}
     (0...{{size}}).each { |idx| Aha.to_io Aha.at({{arr}}, idx), {{type_}}, {{io}}, {{format}} }
     {% if type_.id == "UInt8" %}
       %padding = 4 - ({{size}} % 4)
@@ -51,8 +51,9 @@ module Aha
 
   macro ptr_from_io(type_, io, format)
     begin
-      %size = Aha.from_io Int32, {{io}}, {{format}}
-      %ret = Pointer({{type_}}).malloc(%size){|_| Aha.from_io {{type_}}, {{io}}, {{format}} }
+      %size = Aha.from_io Int64, {{io}}, {{format}}
+      %ret = Pointer({{type_}}).malloc(%size)
+      (0...%size).each {|i| %ret[i] = Aha.from_io {{type_}}, {{io}}, {{format}} }
       {% if type_.id == "UInt8" %}
         %padding = 4 - (%size % 4)
         if %padding != 4
