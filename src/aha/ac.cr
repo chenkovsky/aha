@@ -60,7 +60,7 @@ module Aha
     alias NodeDesc = NamedTuple(node: Cedar::NodeDesc(Int32), len: Int32)
 
     def self.compile(da : Cedar) : AC
-      nlen = da.array.size
+      nlen = da.array_size
       fails = Array(Int32).new(nlen, -1)
       output = Array(OutNode).new(nlen, OutNode.new(-1, -1))
       q = Deque(NodeDesc).new

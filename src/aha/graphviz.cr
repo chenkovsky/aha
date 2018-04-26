@@ -9,7 +9,7 @@ module Aha
     def to_dot(io)
       io.puts "digraph DFA {"
       io.puts "\tnode [color=lightblue2 style=filled]"
-      (0...@array.size).each do |id|
+      (0...@size).each do |id|
         pid = Aha.at(@array, id).check
         next if pid < 0
         pbase = Aha.at(@array, pid).base

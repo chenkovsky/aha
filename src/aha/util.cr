@@ -38,6 +38,31 @@ module Aha
     end
   end
 
+  macro ptr_to_io(arr, size, type_, io, format)
+    {{size}}.to_io {{io}}, {{format}}
+    (0...{{size}}).each { |idx| Aha.to_io Aha.at({{arr}}, idx), {{type_}}, {{io}}, {{format}} }
+    {% if type_.id == "UInt8" %}
+      %padding = 4 - ({{size}} % 4)
+      if %padding != 4
+        (0...%padding).each{|_| Aha.to_io 0_u8, UInt8, io, format}
+      end
+    {% end %}
+  end
+
+  macro ptr_from_io(type_, io, format)
+    begin
+      %size = Aha.from_io Int32, {{io}}, {{format}}
+      %ret = Pointer({{type_}}).malloc(%size){|_| Aha.from_io {{type_}}, {{io}}, {{format}} }
+      {% if type_.id == "UInt8" %}
+        %padding = 4 - (%size % 4)
+        if %padding != 4
+          (0...%padding).each{|_| Aha.from_io UInt8, io, format}
+        end
+      {% end %}
+      { %ret, %size }
+    end
+  end
+
   macro to_io(val, type_, io, format)
     {% if type_.id == "Char" %}
       {{val}}.ord.to_io {{io}}, {{format}}
