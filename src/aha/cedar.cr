@@ -128,12 +128,13 @@ module Aha
     @bheadC : T
     @bheadO : T
     @array_size : T
+    @capacity : T
     @ordered : Bool
     @max_trial : Int32
     @leafs : Array(T) # 每个key 的 id对应的leaf的node的id
 
-    protected setter :array, :blocks, :reject, :bheadF, :bheadC, :bheadO, :array_size, :ordered, :max_trial, :leafs, :key_num
-    protected getter :array, :array_size
+    protected setter :array, :blocks, :reject, :bheadF, :bheadC, :bheadO, :array_size, :ordered, :max_trial, :leafs, :key_num, :capacity
+    protected getter :array, :array_size, :capacity
 
     def key_num
       @key_num
@@ -167,9 +168,10 @@ module Aha
     def self.from_io(io : IO, format : IO::ByteFormat) : self
       c = Cedar.new
       c.key_num = T.from_io io, format
-      c.array, array_size = Aha.ptr_from_io Node(T), io, format
+      c.array, array_size, capacity = Aha.ptr_from_io Node(T), io, format, Math.pw2ceil
       c.array_size = T.new(array_size)
-      c.blocks, _ = Aha.ptr_from_io Block(T), io, format
+      c.capacity = T.new(capacity)
+      c.blocks, _ = Aha.ptr_from_io Block(T), io, format, Math.pw2ceil
       c.reject = Aha.array_from_io Int32, io, format
       c.leafs = Aha.array_from_io T, io, format
       c.bheadF = T.from_io io, format
@@ -183,12 +185,12 @@ module Aha
     def initialize(@ordered = false)
       raise "CedarX's type parameter should be Int32 or Int64" if T != Int32 && T != Int64
 
-      capacity = T.new(256)
+      @capacity = T.new(256)
       @key_num = T.new(0)
-      @leafs = Array(T).new(capacity)
-      @array = Pointer(Node(T)).malloc(capacity)
-      @array_size = capacity
-      @blocks = Pointer(Block(T)).malloc(capacity >> 8)
+      @leafs = Array(T).new(@capacity)
+      @array = Pointer(Node(T)).malloc(@capacity)
+      @array_size = @capacity
+      @blocks = Pointer(Block(T)).malloc(@capacity >> 8)
       @max_trial = 1
       @array[0] = Node(T).new(T.new(-1), T.new(-1))
       # array 第一个节点空置
@@ -278,8 +280,11 @@ module Aha
 
     # 增加一个可用的block, 返回 block 的 id
     private def add_block : T
-      @blocks = @blocks.realloc((@array_size >> 8) + 1)
-      @array = @array.realloc(@array_size + 256)
+      if @array_size == @capacity
+        @capacity *= 2
+        @blocks = @blocks.realloc((@capacity >> 8))
+        @array = @array.realloc(@capacity)
+      end
 
       @blocks[@array_size >> 8] = Block(T).new(T.new(0), T.new(0), 0, @array_size)
       (0...256).each do |i|

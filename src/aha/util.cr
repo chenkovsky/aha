@@ -49,10 +49,11 @@ module Aha
     {% end %}
   end
 
-  macro ptr_from_io(type_, io, format)
+  macro ptr_from_io(type_, io, format, cap_func)
     begin
       %size = Aha.from_io Int64, {{io}}, {{format}}
-      %ret = Pointer({{type_}}).malloc(%size)
+      %capacity = {{cap_func}}(%size)
+      %ret = Pointer({{type_}}).malloc(%capacity)
       (0...%size).each {|i| %ret[i] = Aha.from_io {{type_}}, {{io}}, {{format}} }
       {% if type_.id == "UInt8" %}
         %padding = 4 - (%size % 4)
@@ -60,7 +61,7 @@ module Aha
           (0...%padding).each{|_| Aha.from_io UInt8, io, format}
         end
       {% end %}
-      { %ret, %size }
+      { %ret, %size, %capacity}
     end
   end
 
