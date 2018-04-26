@@ -1,5 +1,5 @@
 module Aha
-  class Cedar
+  class CedarX(T)
     def to_dot
       io = String::Builder.new
       to_dot(io)

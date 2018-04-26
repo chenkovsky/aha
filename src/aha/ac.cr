@@ -57,7 +57,7 @@ module Aha
       self.compile da
     end
 
-    alias NodeDesc = NamedTuple(node: Cedar::NodeDesc, len: Int32)
+    alias NodeDesc = NamedTuple(node: Cedar::NodeDesc(Int32), len: Int32)
 
     def self.compile(da : Cedar) : AC
       nlen = da.array.size

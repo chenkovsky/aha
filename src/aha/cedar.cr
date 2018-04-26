@@ -1,10 +1,15 @@
 module Aha
-  class Cedar
-    include Enumerable({String, Int32})
-    VALUE_LIMIT = (1 << 31) - 1
+  alias Cedar = CedarX(Int32)
 
-    struct NodeDesc
-      @id : Int32
+  class CedarX(T)
+    def self.value_limit
+      T::MAX
+    end
+
+    include Enumerable({String, T})
+
+    struct NodeDesc(T)
+      @id : T
       @label : UInt8
       getter :id, :label
 
@@ -12,9 +17,9 @@ module Aha
       end
     end
 
-    struct Node
-      @value : Int32
-      @check : Int32
+    struct Node(T)
+      @value : T
+      @check : T
       @sibling : UInt8
       @child : UInt8
       @flags : UInt16 # 低九位表示孩子数目
@@ -30,9 +35,9 @@ module Aha
       end
 
       def self.from_io(io : IO, format : IO::ByteFormat) : self
-        n = Node.new(0, 0)
-        n.value = Int32.from_io io, format
-        n.check = Int32.from_io io, format
+        n = Node(T).new(0, 0)
+        n.value = T.from_io io, format
+        n.check = T.from_io io, format
         n.sibling = UInt8.from_io io, format
         n.child = UInt8.from_io io, format
         n.flags = UInt16.from_io io, format
@@ -81,9 +86,9 @@ module Aha
       end
     end
 
-    struct Block
-      @prev : Int32
-      @next : Int32
+    struct Block(T)
+      @prev : T
+      @next : T
       @num : Int32
       @reject : Int32
       @trial : Int32
@@ -101,30 +106,30 @@ module Aha
       end
 
       def self.from_io(io : IO, format : IO::ByteFormat) : self
-        prev = Int32.from_io io, format
-        next_ = Int32.from_io io, format
+        prev = T.from_io io, format
+        next_ = T.from_io io, format
         num = Int32.from_io io, format
         reject = Int32.from_io io, format
         trial = Int32.from_io io, format
         ehead = Int32.from_io io, format
-        Block.new(prev, next_, trial, ehead, num, reject)
+        Block(T).new(prev, next_, trial, ehead, num, reject)
       end
 
       def initialize(@prev, @next, @trial, @ehead, @num = 256, @reject = 257)
       end
     end
 
-    @key_num : Int32
-    @array : Array(Node)
-    @blocks : Array(Block)
+    @key_num : T
+    @array : Array(Node(T))
+    @blocks : Array(Block(T))
     @reject : Array(Int32)
-    @bheadF : Int32
-    @bheadC : Int32
-    @bheadO : Int32
-    @size : Int32
+    @bheadF : T
+    @bheadC : T
+    @bheadO : T
+    @size : T
     @ordered : Bool
     @max_trial : Int32
-    @leafs : Array(Int32) # 每个key 的 id对应的leaf的node的id
+    @leafs : Array(T) # 每个key 的 id对应的leaf的node的id
 
     protected setter :array, :blocks, :reject, :bheadF, :bheadC, :bheadO, :size, :ordered, :max_trial, :leafs, :key_num
     protected getter :array
@@ -141,16 +146,16 @@ module Aha
       0
     end
 
-    def node(nid : Int32) : Pointer(Node)
+    def node(nid : T) : Pointer(Node(T))
       Aha.pointer(@array, nid)
     end
 
     def to_io(io : IO, format : IO::ByteFormat)
       @key_num.to_io io, format
-      Aha.array_to_io @array, Node, io, format
-      Aha.array_to_io @blocks, Block, io, format
+      Aha.array_to_io @array, Node(T), io, format
+      Aha.array_to_io @blocks, Block(T), io, format
       Aha.array_to_io @reject, Int32, io, format
-      Aha.array_to_io @leafs, Int32, io, format
+      Aha.array_to_io @leafs, T, io, format
       @bheadF.to_io io, format
       @bheadC.to_io io, format
       @bheadO.to_io io, format
@@ -161,34 +166,36 @@ module Aha
 
     def self.from_io(io : IO, format : IO::ByteFormat) : self
       c = Cedar.new
-      c.key_num = Int32.from_io io, format
-      c.array = Aha.array_from_io Node, io, format
-      c.blocks = Aha.array_from_io Block, io, format
+      c.key_num = T.from_io io, format
+      c.array = Aha.array_from_io Node(T), io, format
+      c.blocks = Aha.array_from_io Block(T), io, format
       c.reject = Aha.array_from_io Int32, io, format
-      c.leafs = Aha.array_from_io Int32, io, format
-      c.bheadF = Int32.from_io io, format
-      c.bheadC = Int32.from_io io, format
-      c.bheadO = Int32.from_io io, format
-      c.size = Int32.from_io io, format
+      c.leafs = Aha.array_from_io T, io, format
+      c.bheadF = T.from_io io, format
+      c.bheadC = T.from_io io, format
+      c.bheadO = T.from_io io, format
+      c.size = T.from_io io, format
       c.ordered = Int32.from_io(io, format) != 0
       c.max_trial = Int32.from_io io, format
       return c
     end
 
     def initialize(@ordered = false)
+      raise "CedarX's type parameter should be Int32 or Int64" if T != Int32 && T != Int64
+
       capacity = 256
       @key_num = 0
       @leafs = Array(Int32).new(capacity)
-      @array = Array(Node).new(capacity)
-      @blocks = Array(Block).new
+      @array = Array(Node(T)).new(capacity)
+      @blocks = Array(Block(T)).new
       @size = capacity
       @max_trial = 1
-      @array << Node.new(-1, -1)
+      @array << Node(T).new(-1, -1)
       # array 第一个节点空置
-      (1...256).each { |i| @array << Node.new(-(i - 1), -(i + 1)) }
+      (1...256).each { |i| @array << Node(T).new(-(i - 1), -(i + 1)) }
       Aha.at(@array, 1).value = -255
       Aha.at(@array, 255).check = -1
-      @blocks << Block.new(0, 0, 0, 1)
+      @blocks << Block(T).new(0, 0, 0, 1)
       @reject = (0..256).map { |i| i + 1 }
       @bheadF = 0
       @bheadC = 0
@@ -196,10 +203,10 @@ module Aha
     end
 
     # 从 key 的 start 位开始, 从 from 节点开始遍历，如果没有节点就创建节点, 返回最终的叶子节点
-    private def get(key : Bytes | Array(UInt8), from : Int32, start : Int32) : Int32
+    private def get(key : Bytes | Array(UInt8), from : T, start : T) : T
       (start...key.size).each do |pos|
         value = Aha.at(@array, from).value
-        if value >= 0 && value != VALUE_LIMIT
+        if value >= 0 && value != self.class.value_limit
           # 原本这个节点是叶子节点，值就存储在base里面，现在不是叶子节点了。
           # 所以需要新建一个叶子节点。
           # 其实完全可以一开始就新建\0 节点，现在这么做是为了节省空间
@@ -215,7 +222,7 @@ module Aha
     end
 
     # 从 from 开始，如果没有label的子节点，那么创建，返回子节点的id
-    private def follow(from : Int32, label : UInt8) : Int32
+    private def follow(from : T, label : UInt8) : T
       base = Aha.at(@array, from).base
       to = base ^ label.to_i32
       if base < 0 || Aha.at(@array, to).check < 0
@@ -237,7 +244,7 @@ module Aha
     #   bi 当前 block 的 id
     #   head_in 当前 block 链表的头部指针
     #   last 当前block 是否是列表中最后一个block
-    private def pop_block(bi : Int32, head_in : Pointer(Int32), last : Bool) : Void
+    private def pop_block(bi : T, head_in : Pointer(T), last : Bool) : Void
       if last
         head_in.value = 0
       else
@@ -256,7 +263,7 @@ module Aha
     #   bi 当前block的id
     #   head_out 目标block链表的头部
     #   empty headout链表是否为空
-    private def push_block(bi : Int32, head_out : Pointer(Int32), empty : Bool) : Void
+    private def push_block(bi : T, head_out : Pointer(T), empty : Bool) : Void
       b = Aha.pointer @blocks, bi
       if empty
         head_out.value, b.value.prev, b.value.next = bi, bi, bi
@@ -270,10 +277,10 @@ module Aha
     end
 
     # 增加一个可用的block, 返回 block 的 id
-    private def add_block : Int32
-      @blocks << Block.new(0, 0, 0, @size)
+    private def add_block : T
+      @blocks << Block(T).new(0, 0, 0, @size)
       (0...256).each do |i|
-        @array << Node.new(-(((i + 255) & 255) + @size), -(((i + 1) & 255) + @size))
+        @array << Node(T).new(-(((i + 255) & 255) + @size), -(((i + 1) & 255) + @size))
       end
       push_block @size >> 8, pointerof(@bheadO), @bheadO == 0
       @size += 256
@@ -285,7 +292,7 @@ module Aha
     #   bi : 当前block id
     #   head_in : 原来block的头部指针
     #   head
-    private def transfer_block(bi : Int32, head_in : Pointer(Int32), head_out : Pointer(Int32))
+    private def transfer_block(bi : T, head_in : Pointer(T), head_out : Pointer(T))
       pop_block bi, head_in, bi == Aha.at(@blocks, bi).next # 当一个双向列表的next是自己时，说明列表中只有一个元素了
       push_block bi, head_out, head_out.value == 0 && Aha.at(@blocks, bi).num != 0
     end
@@ -294,7 +301,7 @@ module Aha
     # from 为 父节点， base 为该父节点的 base
     # 如果 from 未曾有过子节点，那么给 from 设置一下 base
     # 设置好了子节点的check
-    private def pop_enode(base : Int32, label : UInt8, from : Int32) : Int32
+    private def pop_enode(base : T, label : UInt8, from : T) : T
       e = base < 0 ? find_place : (base ^ label) # 如果还没有任何子节点，给其找个位置
       bi = e >> 8
       n = Aha.pointer @array, e
@@ -320,13 +327,13 @@ module Aha
           transfer_block bi, pointerof(@bheadO), pointerof(@bheadC)
         end
       end
-      n.value.value = VALUE_LIMIT
+      n.value.value = self.class.value_limit
       n.value.check = from
       Aha.at(@array, from).value = -(e ^ label.to_i32) - 1 if base < 0
       e
     end
 
-    private def push_enode(e : Int32)
+    private def push_enode(e : T)
       e_ptr = Aha.pointer @array, e
       bi = e >> 8
       b = Aha.pointer @blocks, bi
@@ -368,7 +375,7 @@ module Aha
     # params:
     #   from 父节点id
     #   label 当前节点 label
-    private def push_sibling(from : Int32, base : Int32, label : UInt8, has_child : Bool)
+    private def push_sibling(from : T, base : T, label : UInt8, has_child : Bool)
       from_ptr = Aha.pointer @array, from
       child_ptr = from_ptr.value.child_ptr
       keep_order = @ordered ? (label > child_ptr.value) : (child_ptr.value == 0)
@@ -385,7 +392,7 @@ module Aha
     end
 
     # 将 label 节点从 sibling 链表移出
-    private def pop_sibling(from : Int32, label : UInt8)
+    private def pop_sibling(from : T, label : UInt8)
       from_ptr = Aha.pointer @array, from
       base = from_ptr.value.base
       child_ptr = from_ptr.value.child_ptr
@@ -397,16 +404,16 @@ module Aha
     end
 
     # 是否保留 pnode
-    private def consult(nref : Pointer(Node), pref : Pointer(Node)) : Bool
+    private def consult(nref : Pointer(Node(T)), pref : Pointer(Node(T))) : Bool
       nref.value.child_num < pref.value.child_num
     end
 
-    def has_label?(id : Int32, label : UInt8) : Bool
+    def has_label?(id : T, label : UInt8) : Bool
       child(id, label) >= 0
     end
 
     # 返回 子节点 的 id
-    def child(id : Int32, label : UInt8) : Int32 # < 0 说明不存在
+    def child(id : T, label : UInt8) : T # < 0 说明不存在
       parent_ptr = Aha.pointer @array, id
       base = parent_ptr.value.base
       cid = base ^ label.to_i32
@@ -415,7 +422,7 @@ module Aha
     end
 
     # yield 所有子节点的 id, label
-    def children(id : Int32, &block)
+    def children(id : T, &block)
       parent_ptr = Aha.pointer @array, id
       base = parent_ptr.value.base
       s = parent_ptr.value.child
@@ -425,12 +432,12 @@ module Aha
       while s != 0
         to = base ^ s.to_i32
         break if to < 0
-        yield NodeDesc.new(to, s)
+        yield NodeDesc(T).new(to, s)
         s = Aha.at(@array, to).sibling
       end
     end
 
-    protected def first_child(id : Int32) : NodeDesc?
+    protected def first_child(id : T) : NodeDesc(T)?
       return nil if id < 0
       parent_ptr = Aha.pointer @array, id
       base = parent_ptr.value.base
@@ -441,29 +448,29 @@ module Aha
       if s != 0
         to = base ^ s.to_i32
         return nil if to < 0
-        return NodeDesc.new(to, s)
+        return NodeDesc(T).new(to, s)
       end
       return nil
     end
 
-    protected def sibling(to : Int32) : NodeDesc?
+    protected def sibling(to : T) : NodeDesc(T)?
       return nil if to < 0
       base = Aha.at(@array, Aha.at(@array, to).check).base
       s = Aha.at(@array, to).sibling
       return nil if s == 0
       to = base ^ s.to_i32
-      return NodeDesc.new(to, s)
+      return NodeDesc(T).new(to, s)
     end
 
-    def children(id : Int32) : Array(NodeDesc)
-      req = [] of NodeDesc
+    def children(id : T) : Array(NodeDesc(T))
+      req = [] of NodeDesc(T)
       children(id).each do |c|
         req << c
       end
       return req
     end
 
-    private def set_child(base : Int32, c : UInt8, label : UInt8, append_label : Bool) : Array(UInt8)
+    private def set_child(base : T, c : UInt8, label : UInt8, append_label : Bool) : Array(UInt8)
       children = Array(UInt8).new(257)
       if c == 0
         children << c
@@ -485,14 +492,14 @@ module Aha
     end
 
     # 找一个位置
-    def find_place : Int32
+    def find_place : T
       return @blocks[@bheadC].ehead if @bheadC != 0
       return @blocks[@bheadO].ehead if @bheadO != 0
       return add_block << 8
     end
 
     # 给所有的 child 找位置
-    def find_places(child : Array(UInt8)) : Int32
+    def find_places(child : Array(UInt8)) : T
       bi = @bheadO
       if bi != 0
         bz = Aha.at(@blocks, @bheadO).prev
@@ -541,7 +548,7 @@ module Aha
       return add_block << 8
     end
 
-    private def resolve(from_n : Int32, base_n : Int32, label_n : UInt8) : Int32
+    private def resolve(from_n : T, base_n : T, label_n : UInt8) : T
       to_pn = base_n ^ label_n.to_i32
       from_p = Aha.at(@array, to_pn).check
       from_p_ptr = Aha.pointer @array, from_p
@@ -583,7 +590,7 @@ module Aha
         next if flag && to_ == to_pn # 这个节点没有子节点不需要下面的操作
         n_ = Aha.pointer @array, to_
         n.value.value = n_.value.value
-        @leafs[n_.value.value] = to if n_.value.value >= 0 && n_.value.value != VALUE_LIMIT # 更新leaf节点信息
+        @leafs[n_.value.value] = to if n_.value.value >= 0 && n_.value.value != self.class.value_limit # 更新leaf节点信息
         n.value.flags = n_.value.flags
         if n.value.value < 0 && chl != 0
           # 更新孙子节点的父节点信息
@@ -604,7 +611,7 @@ module Aha
           push_sibling from_n, to_pn ^ label_n.to_i32, label_n, true
           to_ptr_ = Aha.pointer @array, to_
           to_ptr_.value.child = 0_u8
-          n_.value.value = VALUE_LIMIT
+          n_.value.value = self.class.value_limit
           n_.value.check = from_n
         else
           push_enode to_
@@ -614,7 +621,7 @@ module Aha
       return to_pn                         # 赶走了
     end
 
-    def is_end?(id : Int32) : Bool
+    def is_end?(id : T) : Bool
       return true if Aha.at(@array, id).end?
       Aha.at(@array, id).child == 0
     end
@@ -635,7 +642,7 @@ module Aha
     end
 
     # jumpe 返回节点id
-    private def jump(byte : UInt8, from : Int32 = 0) : Int32
+    private def jump(byte : UInt8, from : Int32 = 0) : T
       from_ptr = Aha.pointer @array, from
       return -1 if from_ptr.value.value >= 0
       to = from_ptr.value.base ^ byte.to_i32
@@ -645,7 +652,7 @@ module Aha
       return to
     end
 
-    private def jump(path : Bytes | Array(UInt8), from : Int32 = 0) : Int32 # 小于 0 说明没有路径
+    private def jump(path : Bytes | Array(UInt8), from : Int32 = 0) : T # 小于 0 说明没有路径
       path.each do |byte|
         from = jump byte, from
         return -1 if from < 0
@@ -654,7 +661,7 @@ module Aha
     end
 
     # yield 路上的节点
-    private def jump(path : Bytes | Array(UInt8), from : Int32 = 0, &block) : Int32 # 小于 0 说明没有路径
+    private def jump(path : Bytes | Array(UInt8), from : Int32 = 0, &block) : T # 小于 0 说明没有路径
       path.each_with_index do |byte, idx|
         from = jump byte, from
         return -1 if from < 0
@@ -664,7 +671,7 @@ module Aha
     end
 
     # 返回给定节点的到根节点的path
-    private def key(id : Int32) : Array(UInt8)
+    private def key(id : T) : Array(UInt8)
       bytes = Array(UInt8).new
       while id > 0
         from = Aha.at(@array, id).check
@@ -683,13 +690,13 @@ module Aha
 
     # 返回 这个节点的value值，已占用节点的value值就是key的idx
     # < 0 就是没有 value
-    protected def value(id) : Int32
+    protected def value(id) : T
       ptr = Aha.pointer @array, id
       val = ptr.value.value
       return val if val >= 0
       to = ptr.value.base
       to_ptr = Aha.pointer @array, to
-      return to_ptr.value.value if to_ptr.value.check == id && to_ptr.value.value >= 0 && to_ptr.value.value != VALUE_LIMIT
+      return to_ptr.value.value if to_ptr.value.check == id && to_ptr.value.value >= 0 && to_ptr.value.value != self.class.value_limit
       return -1
     end
 
@@ -714,19 +721,19 @@ module Aha
     end
 
     # 根据id获得string
-    def [](sid : Int32) : String
+    def [](sid : T) : String
       String.new key(@leafs[sid]).to_unsafe
     end
 
-    def insert(key : String) : Int32
+    def insert(key : String) : T
       insert key.bytes
     end
 
-    def insert(key : Bytes | Array(UInt8)) : Int32
+    def insert(key : Bytes | Array(UInt8)) : T
       p = get key, 0, 0 # 创建节点
       id = @leafs.size
       p_ptr = @array.to_unsafe + p
-      return p_ptr.value.value if p_ptr.value.end? && p_ptr.value.value != VALUE_LIMIT
+      return p_ptr.value.value if p_ptr.value.end? && p_ptr.value.value != self.class.value_limit
       p_ptr.value.value = id # 设置 id
       p_ptr.value.end!
       @leafs << p
@@ -734,12 +741,12 @@ module Aha
       return id
     end
 
-    def delete(key : String) : Int32
+    def delete(key : String) : T
       delete key.bytes
     end
 
     # 返回 被删除的id, 如果 < 0 就是没有这个key
-    def delete(key : Bytes | Array(UInt8)) : Int32
+    def delete(key : Bytes | Array(UInt8)) : T
       to = jump key, 0
       return -1 if to < 0
       vk = value to
@@ -770,12 +777,12 @@ module Aha
       return vk
     end
 
-    def []?(key : String) : Int32?
+    def []?(key : String) : T?
       self[key.to_slice]?
     end
 
     # 返回 -1
-    def []?(key : Bytes | Array(UInt8)) : Int32?
+    def []?(key : Bytes | Array(UInt8)) : T?
       to = jump key, 0
       return nil if to < 0
       vk = value to
@@ -783,7 +790,7 @@ module Aha
       return vk
     end
 
-    def [](key : Bytes | Array(UInt8) | String) : Int32
+    def [](key : Bytes | Array(UInt8) | String) : T
       ret = self[key]?
       raise IndexError.new if ret.nil?
       return ret
@@ -791,7 +798,7 @@ module Aha
 
     # 返回key的所有前缀
     # yield value
-    def prefix_match(key : Bytes | Array(UInt8), num : Int32)
+    def prefix_match(key : Bytes | Array(UInt8), num : T)
       from = 0
       key.each_with_index do |k, i|
         to = jump(k, from)
@@ -807,7 +814,7 @@ module Aha
     end
 
     # 返回以 key 为前缀的字符串
-    def prefix_predict(key : Bytes | Array(UInt8), num : Int32)
+    def prefix_predict(key : Bytes | Array(UInt8), num : T)
       root = jump key, 0
       return if root < 0
       from = self.begin root
@@ -819,7 +826,7 @@ module Aha
     end
 
     # 返回终止节点
-    private def begin(from : Int32) : Int32
+    private def begin(from : T) : T
       from_ptr = Aha.pointer @array, from
       c = from_ptr.value.child
       while c != 0
@@ -833,7 +840,7 @@ module Aha
     end
 
     # 尝试寻找兄弟节点，父节点的兄弟节点，
-    private def next(from : Int32, root : Int32)
+    private def next(from : T, root : T)
       from_ptr = Aha.pointer @array, from
       c = from_ptr.value.sibling
       while c == 0 && from != root && from_ptr.value.check >= 0
@@ -871,7 +878,7 @@ module Aha
     end
 
     def byte_bfs_each(&block)
-      queue = Deque(Int32).new
+      queue = Deque(T).new
       queue << 0
       while queue.size > 0
         node = queue.shift
@@ -883,7 +890,7 @@ module Aha
     end
 
     def byte_dfs_each(&block)
-      stack = Array(Int32).new
+      stack = Array(T).new
       stack << 0
       while stack.size > 0
         node = stack[-1]
@@ -917,7 +924,7 @@ module Aha
       end
     end
 
-    private def jump(chr : Char, from : Int32 = 0) : Int32 # 小于 0 说明没有路径
+    private def jump(chr : Char, from : T = 0) : T # 小于 0 说明没有路径
       chr.each_byte do |byte|
         from = jump byte, from
         return -1 if from < 0
@@ -929,7 +936,7 @@ module Aha
     def exact(s : String, ignore_case : Bool, limit : Int32 = -1)
       return if limit == 0
       queue = [0] # queue of node_id
-      new_queue = [] of Int32
+      new_queue = [] of T
       char_num = 0
       s.each_char do |chr|
         char_num += 1
@@ -959,7 +966,7 @@ module Aha
     def prefix(s : {{name.id}}, ignore_case : Bool, limit : Int32 = -1)
       return if limit == 0
       queue = [0] # queue of node_id
-      new_queue = [] of Int32
+      new_queue = [] of T
       char_num = 0
       num = 0
       s.each{{name == "String" ? "_char".id : "".id}} do |chr|
@@ -1000,7 +1007,7 @@ module Aha
     def predict(s : String, ignore_case : Bool, limit : Int32 = -1)
       return if limit == 0
       queue = [0] # queue of node_id
-      new_queue = [] of Int32
+      new_queue = [] of T
       char_num = 0
       s.each_char do |chr|
         char_num += 1
