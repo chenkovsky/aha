@@ -171,7 +171,7 @@ module Aha
       c.array, array_size, capacity = Aha.ptr_from_io Node(T), io, format, Math.pw2ceil
       c.array_size = T.new(array_size)
       c.capacity = T.new(capacity)
-      c.blocks, _ = Aha.ptr_from_io Block(T), io, format, Math.pw2ceil
+      c.blocks, _, _ = Aha.ptr_from_io Block(T), io, format, Math.pw2ceil
       c.reject = StaticArray(Int32, 257).new { |i| Int32.from_io io, format }
       c.leafs, key_num, key_capacity = Aha.ptr_from_io T, io, format, Math.pw2ceil
       c.key_num = T.new(key_num)

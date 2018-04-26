@@ -5,6 +5,10 @@ module Aha
     arr.to_unsafe + idx
   end
 
+  def self.pointer(arr : ArrayX(T), idx) forall T
+    arr.ptr + idx
+  end
+
   def self.pointer(arr : Pointer(T), idx) forall T
     arr + idx
   end
@@ -67,9 +71,9 @@ module Aha
 
   macro to_io(val, type_, io, format)
     {% if type_.id == "Char" %}
-      {{val}}.ord.to_io {{io}}, {{format}}
+      ({{val}}).ord.to_io {{io}}, {{format}}
     {% else %}
-      {{val}}.to_io {{io}}, {{format}}
+      ({{val}}).to_io {{io}}, {{format}}
     {% end %}
   end
 

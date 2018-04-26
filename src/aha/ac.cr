@@ -26,28 +26,28 @@ module Aha
     end
 
     @da : CedarX(T)
-    @output : Array(OutNode(T))
-    @fails : Array(T)
-    @key_lens : Array(UInt32)
-    @del_num : Int32
+    @output : ArrayX(OutNode(T))
+    @fails : ArrayX(T)
+    @key_lens : ArrayX(UInt32)
+    @del_num : T
 
     delegate :[], to: @da
     delegate :[]?, to: @da
 
     def to_io(io : IO, format : IO::ByteFormat)
       @da.to_io io, format
-      Aha.array_to_io @output, OutNode(T), io, format
-      Aha.array_to_io @fails, T, io, format
-      Aha.array_to_io @key_lens, UInt32, io, format
+      @output.to_io io, format
+      @fails.to_io io, format
+      @key_lens.to_io io, format
       @del_num.to_io io, format
     end
 
     def self.from_io(io : IO, format : IO::ByteFormat) : self
       da = CedarX(T).from_io io, format
-      output = Aha.array_from_io OutNode(T), io, format
-      fails = Aha.array_from_io T, io, format
-      key_lens = Aha.array_from_io UInt32, io, format
-      del_num = Int32.from_io io, format
+      output = ArrayX(OutNode(T)).from_io io, format
+      fails = ArrayX(T).from_io io, format
+      key_lens = ArrayX(UInt32).from_io io, format
+      del_num = T.from_io io, format
       ACX(T).new(da, output, fails, key_lens, del_num)
     end
 
@@ -60,12 +60,12 @@ module Aha
       self.compile da
     end
 
-    def self.compile(da : CedarX(T)) : AC
+    def self.compile(da : CedarX(T)) : self
       nlen = da.array_size
-      fails = Array(T).new(nlen, -1)
-      output = Array(OutNode(T)).new(nlen, OutNode(T).new(-1, -1))
+      fails = ArrayX(T).new(nlen, -1)
+      output = ArrayX(OutNode(T)).new(nlen, OutNode(T).new(-1, -1))
       q = Deque(NamedTuple(node: Cedar::NodeDesc(T), len: Int32)).new
-      key_lens = Array(UInt32).new(da.key_num, 0_u32)
+      key_lens = ArrayX(UInt32).new(da.key_num, 0_u32)
       ro = 0
       fails[ro] = ro
       da.children(ro) do |c|
@@ -100,7 +100,7 @@ module Aha
           end
         end
       end
-      return AC.new(da, output, fails, key_lens)
+      return self.new(da, output, fails, key_lens)
     end
 
     protected def initialize(@da, @output, @fails, @key_lens, @del_num = 0)
@@ -152,7 +152,7 @@ module Aha
         while e.value.value >= 0
           val = e.value.value
           if @key_lens[val] < KEY_LEN_MASK
-            len = @key_lens[val] & (~(1 << 31))
+            len = @key_lens[val] & (KEY_LEN_MASK)
             start_offset = idx - len + 1
             end_offset = idx + 1
             unless bytewise
