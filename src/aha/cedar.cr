@@ -1032,7 +1032,7 @@ module Aha
         queue.each do |node|
           new_node = jump chr, node
           new_queue << new_node if new_node >= 0
-          if ignore_case
+          if ignore_case && other_char != chr
             new_node = jump other_char, node
             new_queue << new_node if new_node >= 0
           end
