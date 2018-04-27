@@ -746,7 +746,7 @@ module Aha
       return p_ptr.value.value if p_ptr.value.end? && p_ptr.value.value != self.class.value_limit
       p_ptr.value.value = id # 设置 id
       p_ptr.value.end!
-      if @key_num == @key_capacity
+      if @leaf_size == @key_capacity
         @key_capacity *= 2
         @leafs = @leafs.realloc(@key_capacity)
       end
