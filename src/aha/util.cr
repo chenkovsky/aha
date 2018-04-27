@@ -1,14 +1,17 @@
 module Aha
   ByteFormat = IO::ByteFormat::LittleEndian
 
+  @[AlwaysInline]
   def self.pointer(arr : Array(T), idx) forall T
     arr.to_unsafe + idx
   end
 
+  @[AlwaysInline]
   def self.pointer(arr : ArrayX(T), idx) forall T
     arr.ptr + idx
   end
 
+  @[AlwaysInline]
   def self.pointer(arr : Pointer(T), idx) forall T
     arr + idx
   end

@@ -482,25 +482,31 @@ module Aha
       return req
     end
 
-    private def set_child(base : T, c : UInt8, label : UInt8, append_label : Bool) : Array(UInt8)
-      children = Array(UInt8).new(257)
+    private def set_child(base : T, c : UInt8, label : UInt8, append_label : Bool, children : Pointer(UInt8)) : Int32
+      idx = 0
       if c == 0
-        children << c
+        children[idx] = c
+        idx += 1
         c = Aha.at(@array, base ^ c).sibling
       end
 
       if @ordered
         while c != 0 && c <= label
-          children << c
+          children[idx] = c
+          idx += 1
           c = Aha.at(@array, base ^ c).sibling
         end
       end
-      children << label if append_label
+      if append_label
+        children[idx] = label
+        idx += 1
+      end
       while c != 0
-        children << c
+        children[idx] = c
+        idx += 1
         c = Aha.at(@array, base ^ c).sibling
       end
-      return children
+      return idx
     end
 
     # 找一个位置
@@ -511,22 +517,22 @@ module Aha
     end
 
     # 给所有的 child 找位置
-    def find_places(child : Array(UInt8)) : T
+    def find_places(children_ : Pointer(UInt8), children_size) : T
       bi = @bheadO
       if bi != 0
         bz = Aha.at(@blocks, @bheadO).prev
-        nc = child.size
+        nc = children_size
         while true
           b = Aha.pointer @blocks, bi
           if b.value.num >= nc && nc < b.value.reject
             # 当前的block是合法的block
             e = b.value.ehead
             while true
-              base = e ^ child[0]
-              i = 0
-              child.each_with_index do |c, i|
+              base = e ^ children_[0]
+              (0...children_size).each do |i|
+                c = children_[i]
                 break unless Aha.at(@array, (base ^ c)).check < 0
-                if i == child.size - 1
+                if i == children_size - 1
                   # 每个子节点都能插入，就这个block了。
                   # ehead 是，
                   b.value.ehead = e
@@ -568,14 +574,15 @@ module Aha
       base_p = Aha.at(@array, from_p).base
       flag = consult from_n_ptr, from_p_ptr
       # 赶走child少的节点
+      children_ = StaticArray(UInt8, 257).new(0_u8)
       if flag
-        children = set_child base_n, from_n_ptr.value.child, label_n, true
+        children_size = set_child base_n, from_n_ptr.value.child, label_n, true, children_.to_unsafe
       else
-        children = set_child base_p, from_p_ptr.value.child, 255_u8, false
+        children_size = set_child base_p, from_p_ptr.value.child, 255_u8, false, children_.to_unsafe
       end
       # 给被踢的children找好位置
-      base = children.size == 1 ? find_place : find_places(children)
-      base ^= children[0]
+      base = children_size == 1 ? find_place : find_places(children_.to_unsafe, children_size)
+      base ^= children_[0]
       if flag
         from = from_n
         from_ptr = Aha.pointer @array, from_n
@@ -585,19 +592,20 @@ module Aha
         from_ptr = Aha.pointer @array, from_p
         base_ = base_p
       end
-      if flag && children[0] == label_n
+      if flag && children_[0] == label_n
         from_ptr.value.child = label_n
       end
       from_ptr.value.value = -base - 1
       # 任意被赶走的重新安置 child
-      children.each_with_index do |chl, i|
+      (0...children_size).each do |i|
+        chl = children_[i]
         to = pop_enode base, chl, from # 新的位置
         to_ = base_ ^ chl              # 原来的位置
         n = Aha.pointer @array, to
-        if i == children.size - 1
+        if i == children_size - 1
           n.value.sibling = 0_u8
         else
-          n.value.sibling = children[i + 1]
+          n.value.sibling = children_[i + 1]
         end
         next if flag && to_ == to_pn # 这个节点没有子节点不需要下面的操作
         n_ = Aha.pointer @array, to_
@@ -720,16 +728,6 @@ module Aha
       to_ptr = Aha.pointer @array, to
       return true if to_ptr.value.check == id && to_ptr.value.value >= 0
       return false
-    end
-
-    private def has_direct_value?(id) : Bool # 当前节点就有value
-      ptr = Aha.pointer @array, id
-      val = ptr.value.value
-      val >= 0
-    end
-
-    private def has_indirect_value(id) : Bool
-      ptr = Aha.pointer @array, id
     end
 
     # 根据id获得string
