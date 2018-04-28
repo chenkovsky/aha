@@ -124,12 +124,25 @@ module Aha
       end
     end
 
-    private def byte_index_to_char_index(seq : Array(UInt8))
-      byte_index_to_char_index seq.to_unsafe
-    end
-
-    private def byte_index_to_char_index(seq : Bytes)
-      byte_index_to_char_index String.new(seq)
+    private def match_(seq : String, char_of_byte : Array(Int32))
+      nid = 0
+      seq.each_char_with_index do |chr, i|
+        chr.each_byte do |b|
+          char_of_byte << i
+          while true
+            nid_ = @da.child nid, b
+            if nid_ >= 0
+              nid = nid_
+              if @da.is_end? nid
+                yield (char_of_byte.size - 1), nid
+              end
+              break
+            end
+            break if nid == 0
+            nid = @fails[nid]
+          end
+        end
+      end
     end
 
     private KEY_LEN_MASK = ~(1 << 31)
@@ -144,10 +157,26 @@ module Aha
       @key_lens[kid] ||= DELETE_MASK
     end
 
-    def match(seq : String | Bytes | Array(UInt8), bytewise : Bool = false, &block)
-      seq_ = seq.is_a?(String) ? seq.bytes : seq
-      offset_mapping = bytewise ? nil : Aha.byte_index_to_char_index(seq)
-      match_ seq_ do |idx, nid|
+    def match(seq : String, &block)
+      char_of_byte = Array(Int32).new(seq.bytesize) # 用于返回真实的offset
+      match_ seq, char_of_byte do |idx, nid|
+        e = Aha.pointer @output, nid
+        while e.value.value >= 0
+          val = e.value.value
+          if @key_lens[val] < KEY_LEN_MASK
+            len = @key_lens[val] & (KEY_LEN_MASK)
+            start_offset = char_of_byte[idx - len + 1]
+            end_offset = char_of_byte[idx] + 1
+            yield Hit.new(start_offset, end_offset, val)
+          end
+          break unless e.value.next >= 0
+          e = Aha.pointer(@output, e.value.next)
+        end
+      end
+    end
+
+    def match(seq : Bytes | Array(UInt8), &block)
+      match_ seq do |idx, nid|
         e = Aha.pointer @output, nid
         while e.value.value >= 0
           val = e.value.value
@@ -155,10 +184,6 @@ module Aha
             len = @key_lens[val] & (KEY_LEN_MASK)
             start_offset = idx - len + 1
             end_offset = idx + 1
-            unless bytewise
-              start_offset = offset_mapping.not_nil![start_offset]
-              end_offset = offset_mapping.not_nil![end_offset]
-            end
             yield Hit.new(start_offset, end_offset, val)
           end
           break unless e.value.next >= 0

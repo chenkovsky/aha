@@ -171,17 +171,6 @@ module Aha
     MultiplyDeBruijnBitPosition2[(v * 0x077CB531) >> 27]
   end
 
-  protected def self.byte_index_to_char_index(seq : String)
-    start_byte_idx = 0
-    ret = {} of Int32 => Int32
-    seq.each_char_with_index do |chr, idx|
-      ret[start_byte_idx] = idx
-      start_byte_idx += chr.bytesize
-    end
-    ret[start_byte_idx] = seq.size
-    return ret
-  end
-
   def self.binary_search(arr, elem, reverse = false) : Int32
     # search in ordered array
     start = 0
