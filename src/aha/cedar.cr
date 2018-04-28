@@ -731,8 +731,8 @@ module Aha
     end
 
     # 根据id获得string
-    def [](sid : Int) : String
-      String.new key(@leafs[T.new(sid)]).to_unsafe # @TODO
+    def [](sid : T) : String
+      String.new key(@leafs[sid]).to_unsafe
     end
 
     def insert(key : String) : T
@@ -741,7 +741,7 @@ module Aha
 
     def insert(key : Bytes | Array(UInt8)) : T
       p = get key, T.new(0), T.new(0) # 创建节点
-      id = T.new(@leaf_size)          # @TODO 替代 array后换掉
+      id = @leaf_size
       p_ptr = Aha.pointer(@array, p)
       return p_ptr.value.value if p_ptr.value.end? && p_ptr.value.value != self.class.value_limit
       p_ptr.value.value = id # 设置 id
@@ -883,7 +883,7 @@ module Aha
     def byte_each(&block)
       (0...@leaf_size).each do |id|
         lnode = @leafs[id]
-        yield({key(lnode), T.new(id)}) if id >= 0 # @TODO 替换 array 后, 替换
+        yield({key(lnode), id}) if id >= 0
       end
     end
 
