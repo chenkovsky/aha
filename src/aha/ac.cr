@@ -65,7 +65,7 @@ module Aha
       fails = ArrayX(T).new(nlen, -1)
       output = ArrayX(OutNode(T)).new(nlen, OutNode(T).new(-1, -1))
       q = Deque(NamedTuple(node: Cedar::NodeDesc(T), len: Int32)).new
-      key_lens = ArrayX(UInt32).new(da.key_num, 0_u32)
+      key_lens = ArrayX(UInt32).new(da.leaf_size, 0_u32)
       ro = 0
       fails[ro] = ro
       da.children(ro) do |c|

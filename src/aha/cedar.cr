@@ -136,7 +136,7 @@ module Aha
     @leaf_size : T
 
     protected setter :array, :blocks, :reject, :bheadF, :bheadC, :bheadO, :array_size, :ordered, :max_trial, :leafs, :key_num, :capacity, :key_capacity
-    protected getter :array, :array_size, :capacity
+    protected getter :array, :array_size, :capacity, :leaf_size
 
     def key_num
       @key_num
