@@ -15,7 +15,7 @@ module Aha
       @ptr[idx] = val
     end
 
-    def [](idx : Int)
+    def [](idx : Int) : T
       @ptr[idx]
     end
 

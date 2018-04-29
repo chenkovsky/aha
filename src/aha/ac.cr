@@ -62,11 +62,11 @@ module Aha
 
     def self.compile(da : CedarX(T)) : self
       nlen = da.array_size
-      fails = ArrayX(T).new(nlen, -1)
-      output = ArrayX(OutNode(T)).new(nlen, OutNode(T).new(-1, -1))
+      fails = ArrayX(T).new(nlen, T.new(-1))
+      output = ArrayX(OutNode(T)).new(nlen, OutNode(T).new(T.new(-1), T.new(-1)))
       q = Deque(NamedTuple(node: Cedar::NodeDesc(T), len: Int32)).new
       key_lens = ArrayX(UInt32).new(da.leaf_size, 0_u32)
-      ro = 0
+      ro = 0_i64
       fails[ro] = ro
       da.children(ro) do |c|
         # 根节点的子节点，失败都返回根节点
@@ -103,7 +103,7 @@ module Aha
       return self.new(da, output, fails, key_lens)
     end
 
-    protected def initialize(@da, @output, @fails, @key_lens, @del_num = 0)
+    protected def initialize(@da, @output, @fails, @key_lens, @del_num = T.new(0))
     end
 
     private def match_(seq : Bytes | Array(UInt8))

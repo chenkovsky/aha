@@ -429,7 +429,7 @@ module Aha
       parent_ptr = Aha.pointer @array, id
       base = parent_ptr.value.base
       cid = base ^ label
-      return -1 if cid < 0 || cid >= @array_size || !Aha.at(@array, cid).is_child?(id)
+      return T.new(-1) if cid < 0 || cid >= @array_size || !Aha.at(@array, cid).is_child?(id)
       return cid
     end
 
