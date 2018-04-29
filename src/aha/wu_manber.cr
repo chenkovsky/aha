@@ -1,4 +1,5 @@
 require "sub_hash"
+require "./matcher"
 
 struct SubHash
   def to_io(io, format, include_cache = false)
@@ -28,6 +29,7 @@ end
 
 module Aha
   class WuManber
+    include Aha::MatchString
     @[Flags]
     enum CharSet
       Alphabet
@@ -194,20 +196,6 @@ module Aha
             arr << j
           end
         end
-      end
-    end
-
-    def match(seq : String, &block)
-      char_of_byte = Array(Int32).new(seq.bytesize)
-      bytes = Array(UInt8).new(seq.bytesize)
-      seq.each_char_with_index do |chr, chr_idx|
-        chr.each_byte do |b|
-          char_of_byte << chr_idx
-          bytes << b
-        end
-      end
-      match(seq.bytes) do |hit|
-        yield Hit.new(char_of_byte[hit.start], char_of_byte[hit.end-1] + 1, hit.value)
       end
     end
 

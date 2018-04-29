@@ -1,3 +1,4 @@
+require "./matcher"
 module Aha
   # 如果找不到子节点，每次都去fail节点查看有没有相对应的子节点。
   # 相应的，如果找到了end节点，也需要将fail节点的out values加入
@@ -5,6 +6,7 @@ module Aha
   alias ACBig = ACX(Int64)
 
   class ACX(T)
+    include Aha::MatchString
     struct OutNode(T)
       @next : T
       @value : T
@@ -155,24 +157,6 @@ module Aha
     def delete(kid : T)
       @del_num += 1 if (@key_lens[kid] & DELETE_MASK) == 0
       @key_lens[kid] ||= DELETE_MASK
-    end
-
-    def match(seq : String, &block)
-      char_of_byte = Array(Int32).new(seq.bytesize) # 用于返回真实的offset
-      match_ seq, char_of_byte do |idx, nid|
-        e = Aha.pointer @output, nid
-        while e.value.value >= 0
-          val = e.value.value
-          if @key_lens[val] < KEY_LEN_MASK
-            len = @key_lens[val] & (KEY_LEN_MASK)
-            start_offset = char_of_byte[idx - len + 1]
-            end_offset = char_of_byte[idx] + 1
-            yield Hit.new(start_offset, end_offset, val)
-          end
-          break unless e.value.next >= 0
-          e = Aha.pointer(@output, e.value.next)
-        end
-      end
     end
 
     def match(seq : Bytes | Array(UInt8), &block)
