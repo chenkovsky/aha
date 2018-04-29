@@ -7,6 +7,10 @@ module Aha
       T::MAX
     end
 
+    def self.value_min
+      T::MIN
+    end
+
     include Enumerable({String, T})
 
     struct NodeDesc(T)
@@ -134,8 +138,9 @@ module Aha
     @max_trial : Int32
     @leafs : Pointer(T) # 每个key 的 id对应的leaf的node的id
     @leaf_size : T
+    @free_leaf_slot : T
 
-    protected setter :array, :blocks, :reject, :bheadF, :bheadC, :bheadO, :array_size, :ordered, :max_trial, :leafs, :key_num, :capacity, :key_capacity
+    protected setter :array, :blocks, :reject, :bheadF, :bheadC, :bheadO, :array_size, :ordered, :max_trial, :leafs, :key_num, :capacity, :key_capacity, :free_leaf_slot
     protected getter :array, :array_size, :capacity, :leaf_size
 
     def key_num
@@ -164,6 +169,7 @@ module Aha
       @bheadO.to_io io, format
       (@ordered ? 1 : 0).to_io io, format
       @max_trial.to_io io, format
+      @free_leaf_slot.to_io io, format
     end
 
     def self.from_io(io : IO, format : IO::ByteFormat) : self
@@ -181,6 +187,7 @@ module Aha
       c.bheadO = T.from_io io, format
       c.ordered = Int32.from_io(io, format) != 0
       c.max_trial = Int32.from_io io, format
+      c.free_leaf_slot = T.from_io io, format
       return c
     end
 
@@ -206,6 +213,7 @@ module Aha
       @bheadF = T.new(0)
       @bheadC = T.new(0)
       @bheadO = T.new(0)
+      @free_leaf_slot = self.class.value_min
     end
 
     # 从 key 的 start 位开始, 从 from 节点开始遍历，如果没有节点就创建节点, 返回最终的叶子节点
@@ -741,17 +749,23 @@ module Aha
 
     def insert(key : Bytes | Array(UInt8)) : T
       p = get key, T.new(0), T.new(0) # 创建节点
-      id = @leaf_size
       p_ptr = Aha.pointer(@array, p)
       return p_ptr.value.value if p_ptr.value.end? && p_ptr.value.value != self.class.value_limit
+      id = if @free_leaf_slot != self.class.value_min
+        cur = - @free_leaf_slot - 1
+        @free_leaf_slot = @leafs[cur]
+        cur
+      else
+        if @leaf_size == @key_capacity
+          @key_capacity *= 2
+          @leafs = @leafs.realloc(@key_capacity)
+        end
+        @leaf_size += 1
+        @leaf_size - 1
+      end
       p_ptr.value.value = id # 设置 id
       p_ptr.value.end!
-      if @leaf_size == @key_capacity
-        @key_capacity *= 2
-        @leafs = @leafs.realloc(@key_capacity)
-      end
-      @leafs[@leaf_size] = p
-      @leaf_size += 1
+      @leafs[id] = p
       @key_num += 1
       return id
     end
@@ -788,7 +802,8 @@ module Aha
         to = from
       end
       @key_num -= 1
-      @leafs[vk] = T.new(-1)
+      @leafs[vk] = @free_leaf_slot
+      @free_leaf_slot = -(vk + 1)
       return vk
     end
 

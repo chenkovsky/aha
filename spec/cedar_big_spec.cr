@@ -9,6 +9,7 @@ describe Aha do
     ids.should eq([0_i64, 1_i64, 2_i64])
     trie.delete("ruby").should eq(1_i64)
     trie.delete("ruby").should eq(-1_i64)
+    trie.insert("ruby").should eq(1_i64)
   end
   it "cedar iter" do
     trie = Aha::CedarBig.new(true)
