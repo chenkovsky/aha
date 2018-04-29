@@ -66,7 +66,7 @@ module Aha
       output = ArrayX(OutNode(T)).new(nlen, OutNode(T).new(T.new(-1), T.new(-1)))
       q = Deque(NamedTuple(node: Cedar::NodeDesc(T), len: Int32)).new
       key_lens = ArrayX(UInt32).new(da.leaf_size, 0_u32)
-      ro = 0_i64
+      ro = T.new(0)
       fails[ro] = ro
       da.children(ro) do |c|
         # 根节点的子节点，失败都返回根节点

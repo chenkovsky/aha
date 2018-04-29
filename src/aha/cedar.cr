@@ -731,7 +731,7 @@ module Aha
     end
 
     # 根据id获得string
-    def [](sid : T) : String
+    def [](sid : Int) : String
       String.new key(@leafs[sid]).to_unsafe
     end
 
@@ -881,7 +881,7 @@ module Aha
     end
 
     def byte_each(&block)
-      (0...@leaf_size).each do |id|
+      (T.new(0)...@leaf_size).each do |id|
         lnode = @leafs[id]
         yield({key(lnode), id}) if id >= 0
       end

@@ -197,9 +197,21 @@ module Aha
       end
     end
 
-    def match(text : Bytes | String | Array(Bytes), bytewise : Bool = false, &block)
-      text_ = text.is_a?(String) ? text.bytes : text
-      offset_mapping = bytewise ? nil : Aha.byte_index_to_char_index(text)
+    def match(seq : String, &block)
+      char_of_byte = Array(Int32).new(seq.bytesize)
+      bytes = Array(UInt8).new(seq.bytesize)
+      seq.each_char_with_index do |chr, chr_idx|
+        chr.each_byte do |b|
+          char_of_byte << chr_idx
+          bytes << b
+        end
+      end
+      match(seq.bytes) do |hit|
+        yield Hit.new(char_of_byte[hit.start], char_of_byte[hit.end-1] + 1, hit.value)
+      end
+    end
+
+    def match(text_ : Bytes | Array(UInt8), &block)
       @hasher.sub_hash text_
       ix = @min_len - 1
       while ix < text_.size
@@ -217,10 +229,6 @@ module Aha
           arr.each do |pat_idx|
             if @patterns[pat_idx].size == len && (0...len).all? { |i| @patterns[pat_idx][i] == text_[start_idx + i] }
               end_idx = start_idx + len
-              unless bytewise
-                start_idx = offset_mapping.not_nil![start_idx]
-                end_idx = offset_mapping.not_nil![end_idx]
-              end
               yield Hit.new(start_idx, end_idx, pat_idx)
             end
           end
