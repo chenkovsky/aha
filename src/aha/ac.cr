@@ -1,4 +1,5 @@
 require "./matcher"
+require "bit_array"
 module Aha
   # 如果找不到子节点，每次都去fail节点查看有没有相对应的子节点。
   # 相应的，如果找到了end节点，也需要将fail节点的out values加入
@@ -159,19 +160,25 @@ module Aha
       @key_lens[kid] ||= DELETE_MASK
     end
 
+    private def fetch(idx, nid)
+      e = Aha.pointer @output, nid
+      while e.value.value >= 0
+        val = e.value.value
+        if @key_lens[val] < KEY_LEN_MASK
+          len = @key_lens[val] & (KEY_LEN_MASK)
+          start_offset = idx - len + 1
+          end_offset = idx + 1
+          yield Hit.new(start_offset, end_offset, val)
+        end
+        break unless e.value.next >= 0
+        e = Aha.pointer(@output, e.value.next)
+      end
+    end
+
     def match(seq : Bytes | Array(UInt8), &block)
       match_ seq do |idx, nid|
-        e = Aha.pointer @output, nid
-        while e.value.value >= 0
-          val = e.value.value
-          if @key_lens[val] < KEY_LEN_MASK
-            len = @key_lens[val] & (KEY_LEN_MASK)
-            start_offset = idx - len + 1
-            end_offset = idx + 1
-            yield Hit.new(start_offset, end_offset, val)
-          end
-          break unless e.value.next >= 0
-          e = Aha.pointer(@output, e.value.next)
+        fetch(idx, nid) do |hit|
+          yield hit
         end
       end
     end
@@ -185,6 +192,27 @@ module Aha
     def self.load(path)
       File.open(path, "rb") do |f|
         return self.from_io f, Aha::ByteFormat
+      end
+    end
+
+    def match(seq : Bytes | Array(UInt8), sep : BitArray, &block)
+      raise "sep BitArray size > 256 is not supported" if sep.size > 256
+      match_ seq do |idx, nid|
+        if idx + 1 < seq.size
+          chr = seq[idx + 1]
+          if chr < sep.size && !sep[chr]
+            next
+          end
+        end
+        fetch(idx, nid) do |hit|
+          if hit.start > 0
+            chr = seq[hit.start - 1]
+            if chr < sep.size && !sep[chr]
+              next
+            end
+          end
+          yield hit
+        end
       end
     end
   end
