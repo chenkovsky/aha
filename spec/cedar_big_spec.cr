@@ -2,27 +2,27 @@ require "./spec_helper"
 
 describe Aha do
   it "cedar insert delete" do
-    trie = Aha::Cedar.new
+    trie = Aha::CedarBig.new
     ids = %w(Ruby ruby rb).map do |s|
       trie.insert s
     end
-    ids.should eq([0, 1, 2])
-    trie.delete("ruby").should eq(1)
-    trie.delete("ruby").should eq(-1)
-    trie.insert("ruby").should eq(1)
+    ids.should eq([0_i64, 1_i64, 2_i64])
+    trie.delete("ruby").should eq(1_i64)
+    trie.delete("ruby").should eq(-1_i64)
+    trie.insert("ruby").should eq(1_i64)
   end
   it "cedar iter" do
-    trie = Aha::Cedar.new(true)
+    trie = Aha::CedarBig.new(true)
     ids = %w(Ruby ruby rb XX).map do |s|
       trie.insert s
     end
-    arr = [] of Tuple(String, Int32)
+    arr = [] of Tuple(String, Int64)
     trie.dfs_each { |k, v| arr << ({k, v}) }
-    arr.should eq([{"Ruby", 0}, {"XX", 3}, {"rb", 2}, {"ruby", 1}])
+    arr.should eq([{"Ruby", 0_i64}, {"XX", 3_i64}, {"rb", 2_i64}, {"ruby", 1_i64}])
     arr.clear
     trie.bfs_each { |k, v| arr << ({k, v}) }
-    arr.should eq([{"XX", 3}, {"rb", 2}, {"Ruby", 0}, {"ruby", 1}])
-    trie.to_a.map { |k, v| {k, v} }.should eq([{"Ruby", 0}, {"ruby", 1}, {"rb", 2}, {"XX", 3}])
+    arr.should eq([{"XX", 3_i64}, {"rb", 2_i64}, {"Ruby", 0_i64}, {"ruby", 1_i64}])
+    trie.to_a.map { |k, v| {k, v} }.should eq([{"Ruby", 0_i64}, {"ruby", 1_i64}, {"rb", 2_i64}, {"XX", 3_i64}])
   end
 
   it "words" do
@@ -277,7 +277,7 @@ VerbType_cop
 VerbType_mod
 VerbType_light
 TXT
-    trie = Aha::Cedar.new
+    trie = Aha::CedarBig.new
     lines = [] of String
     words.each_line do |l|
       lines << l.strip
@@ -292,7 +292,7 @@ TXT
     end
   end
   it "prefix suffix" do
-    trie = Aha::Cedar.new
+    trie = Aha::CedarBig.new
     trie.insert "Polite_pol"
     trie.insert "polite"
     File.open("tmp.dot", "w") do |f|

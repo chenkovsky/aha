@@ -1,8 +1,19 @@
 module Aha
   ByteFormat = IO::ByteFormat::LittleEndian
 
-  macro pointer(arr, idx)
-    ({{arr}}.to_unsafe + ({{idx}}))
+  @[AlwaysInline]
+  def self.pointer(arr : Array(T), idx) forall T
+    arr.to_unsafe + idx
+  end
+
+  @[AlwaysInline]
+  def self.pointer(arr : ArrayX(T), idx) forall T
+    arr.ptr + idx
+  end
+
+  @[AlwaysInline]
+  def self.pointer(arr : Pointer(T), idx) forall T
+    arr + idx
   end
 
   macro at(arr, idx)
@@ -34,11 +45,38 @@ module Aha
     end
   end
 
+  macro ptr_to_io(arr, size, type_, io, format)
+    ({{size}}).to_i64.to_io {{io}}, {{format}}
+    (0...{{size}}).each { |idx| Aha.to_io Aha.at({{arr}}, idx), {{type_}}, {{io}}, {{format}} }
+    {% if type_.id == "UInt8" %}
+      %padding = 4 - ({{size}} % 4)
+      if %padding != 4
+        (0...%padding).each{|_| Aha.to_io 0_u8, UInt8, io, format}
+      end
+    {% end %}
+  end
+
+  macro ptr_from_io(type_, io, format, cap_func)
+    begin
+      %size = Aha.from_io Int64, {{io}}, {{format}}
+      %capacity = {{cap_func}}(%size)
+      %ret = Pointer({{type_}}).malloc(%capacity)
+      (0...%size).each {|i| %ret[i] = Aha.from_io {{type_}}, {{io}}, {{format}} }
+      {% if type_.id == "UInt8" %}
+        %padding = 4 - (%size % 4)
+        if %padding != 4
+          (0...%padding).each{|_| Aha.from_io UInt8, io, format}
+        end
+      {% end %}
+      { %ret, %size, %capacity}
+    end
+  end
+
   macro to_io(val, type_, io, format)
     {% if type_.id == "Char" %}
-      {{val}}.ord.to_io {{io}}, {{format}}
+      ({{val}}).ord.to_io {{io}}, {{format}}
     {% else %}
-      {{val}}.to_io {{io}}, {{format}}
+      ({{val}}).to_io {{io}}, {{format}}
     {% end %}
   end
 
@@ -131,17 +169,6 @@ module Aha
   def self.msb_for_2power(v : UInt32)
     # 仅限于2的n次
     MultiplyDeBruijnBitPosition2[(v * 0x077CB531) >> 27]
-  end
-
-  protected def self.byte_index_to_char_index(seq : String)
-    start_byte_idx = 0
-    ret = {} of Int32 => Int32
-    seq.each_char_with_index do |chr, idx|
-      ret[start_byte_idx] = idx
-      start_byte_idx += chr.bytesize
-    end
-    ret[start_byte_idx] = seq.size
-    return ret
   end
 
   def self.binary_search(arr, elem, reverse = false) : Int32

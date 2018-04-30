@@ -21,4 +21,15 @@ describe Aha do
     end
     matched.should eq([{1, 0}, {2, 1}, {3, 2}])
   end
+
+  it "ac with sep" do
+    matcher = Aha::AC.compile %w(a aa)
+    matched = [] of Tuple(Int32, Int32)
+    sep = BitArray.new(256)
+    sep[' '.ord] = true
+    matcher.match("a aaa", sep) do |hit|
+      matched << ({hit.end, hit.value})
+    end
+    matched.should eq([{1, 0}])
+  end
 end

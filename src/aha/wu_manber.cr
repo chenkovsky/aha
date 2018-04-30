@@ -1,4 +1,5 @@
 require "sub_hash"
+require "./matcher"
 
 struct SubHash
   def to_io(io, format, include_cache = false)
@@ -28,6 +29,7 @@ end
 
 module Aha
   class WuManber
+    include Aha::MatchString
     @[Flags]
     enum CharSet
       Alphabet
@@ -197,9 +199,7 @@ module Aha
       end
     end
 
-    def match(text : Bytes | String | Array(Bytes), bytewise : Bool = false, &block)
-      text_ = text.is_a?(String) ? text.bytes : text
-      offset_mapping = bytewise ? nil : Aha.byte_index_to_char_index(text)
+    def match(text_ : Bytes | Array(UInt8), &block)
       @hasher.sub_hash text_
       ix = @min_len - 1
       while ix < text_.size
@@ -217,10 +217,6 @@ module Aha
           arr.each do |pat_idx|
             if @patterns[pat_idx].size == len && (0...len).all? { |i| @patterns[pat_idx][i] == text_[start_idx + i] }
               end_idx = start_idx + len
-              unless bytewise
-                start_idx = offset_mapping.not_nil![start_idx]
-                end_idx = offset_mapping.not_nil![end_idx]
-              end
               yield Hit.new(start_idx, end_idx, pat_idx)
             end
           end
