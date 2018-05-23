@@ -749,9 +749,10 @@ module Aha
 
     def insert(key : Bytes | Array(UInt8)) : T
       raise "Cannot insert empty key" if key.size == 0
+      id = self[key]?
+      return id unless id.nil?
       p = get key, T.new(0), T.new(0) # 创建节点
       p_ptr = Aha.pointer(@array, p)
-      return p_ptr.value.value if p_ptr.value.end? && p_ptr.value.value != self.class.value_limit
       id = if @free_leaf_slot != self.class.value_min
              cur = -@free_leaf_slot - 1
              @free_leaf_slot = @leafs[cur]
