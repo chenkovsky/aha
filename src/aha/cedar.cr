@@ -753,17 +753,17 @@ module Aha
       p_ptr = Aha.pointer(@array, p)
       return p_ptr.value.value if p_ptr.value.end? && p_ptr.value.value != self.class.value_limit
       id = if @free_leaf_slot != self.class.value_min
-        cur = - @free_leaf_slot - 1
-        @free_leaf_slot = @leafs[cur]
-        cur
-      else
-        if @leaf_size == @key_capacity
-          @key_capacity *= 2
-          @leafs = @leafs.realloc(@key_capacity)
-        end
-        @leaf_size += 1
-        @leaf_size - 1
-      end
+             cur = -@free_leaf_slot - 1
+             @free_leaf_slot = @leafs[cur]
+             cur
+           else
+             if @leaf_size == @key_capacity
+               @key_capacity *= 2
+               @leafs = @leafs.realloc(@key_capacity)
+             end
+             @leaf_size += 1
+             @leaf_size - 1
+           end
       p_ptr.value.value = id # 设置 id
       p_ptr.value.end!
       @leafs[id] = p
@@ -899,7 +899,7 @@ module Aha
     def byte_each(&block)
       (T.new(0)...@leaf_size).each do |id|
         lnode = @leafs[id]
-        yield({key(lnode), id}) if id >= 0
+        yield({key(lnode), id}) if lnode >= 0
       end
     end
 

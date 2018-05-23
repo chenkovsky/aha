@@ -1,5 +1,6 @@
 require "./matcher"
 require "bit_array"
+
 module Aha
   # 如果找不到子节点，每次都去fail节点查看有没有相对应的子节点。
   # 相应的，如果找到了end节点，也需要将fail节点的out values加入
@@ -8,6 +9,7 @@ module Aha
 
   class ACX(T)
     include Aha::MatchString
+
     struct OutNode(T)
       @next : T
       @value : T
@@ -110,7 +112,7 @@ module Aha
     end
 
     private def match_(seq : Bytes | Array(UInt8))
-      nid = 0
+      nid = T.new(0)
       seq.each_with_index do |b, i|
         while true
           nid_ = @da.child nid, b
@@ -168,7 +170,7 @@ module Aha
           len = @key_lens[val] & (KEY_LEN_MASK)
           start_offset = idx - len + 1
           end_offset = idx + 1
-          yield Hit.new(start_offset, end_offset, val)
+          yield Hit.new(start_offset, end_offset, val.to_i32)
         end
         break unless e.value.next >= 0
         e = Aha.pointer(@output, e.value.next)
