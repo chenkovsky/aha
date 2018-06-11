@@ -228,6 +228,7 @@ module Aha
           Aha.at(@array, to).value = value
           @leafs[value] = to
         end
+        raise "key[#{pos}] is zero" if key[pos] == 0
         from = follow(from, key[pos])
       end
       # value < 0 时 base >= 0, 说明不是叶子节点
