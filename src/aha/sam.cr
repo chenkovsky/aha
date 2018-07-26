@@ -1,5 +1,6 @@
 module Aha
   class SAM
+    SuperIO.save_load
     @lens : Array(Int32)
     @slinks : Array(Int32) # 不在同一个right class的最长的suffix的class
     @nmas : Array(Int32)   # nearest marked ancestor (NMA) data structure on the inverse suffix link tree
@@ -40,31 +41,31 @@ module Aha
     end
 
     def to_io(io : IO, format : IO::ByteFormat)
-      Aha.array_to_io @lens, Int32, io, format
-      Aha.array_to_io @slinks, Int32, io, format
-      Aha.array_to_io @nmas, Int32, io, format
-      Aha.array_to_io @flags, UInt8, io, format
-      Aha.array_to_io @outputs, UInt32, io, format
-      Aha.array_to_io @key_lens, UInt32, io, format
-      Aha.string_array_to_io @keys, io, format
+      SuperIO.to_io @lens, io, format
+      SuperIO.to_io @slinks, io, format
+      SuperIO.to_io @nmas, io, format
+      SuperIO.to_io @flags, io, format
+      SuperIO.to_io @outputs, io, format
+      SuperIO.to_io @key_lens, io, format
+      SuperIO.to_io @keys, io, format
       @del_num.to_io io, format
       @nexts.size.to_io io, format
       @nexts.each do |hs|
-        Aha.hash_to_io hs, Char, Int32, io, format
+        SuperIO.to_io hs, io, format
       end
     end
 
     def self.from_io(io : IO, format : IO::ByteFormat) : self
-      lens = Aha.array_from_io Int32, io, format
-      slinks = Aha.array_from_io Int32, io, format
-      nmas = Aha.array_from_io Int32, io, format
-      flags = Aha.array_from_io UInt8, io, format
-      outputs = Aha.array_from_io Int32, io, format
-      key_lens = Aha.array_from_io UInt32, io, format
-      keys = Aha.string_array_from_io io, format
+      lens = SuperIO.from_io Array(Int32), io, format
+      slinks = SuperIO.from_io Array(Int32), io, format
+      nmas = SuperIO.from_io Array(Int32), io, format
+      flags = SuperIO.from_io Array(UInt8), io, format
+      outputs = SuperIO.from_io Array(Int32), io, format
+      key_lens = SuperIO.from_io Array(UInt32), io, format
+      keys = SuperIO.from_io Array(String), io, format
       del_num = Int32.from_io io, format
       next_size = Int32.from_io io, format
-      nexts = (0...next_size).map { |_| Aha.hash_from_io Char, Int32, io, format }
+      nexts = (0...next_size).map { |_| SuperIO.from_io Hash(Char, Int32), io, format }
       return SAM.new(lens, slinks, nmas, nexts, flags, outputs, key_lens, keys, del_num)
     end
 
@@ -173,18 +174,6 @@ module Aha
         end
       end
       return newchildnode
-    end
-
-    def save(path)
-      File.open(path, "wb") do |f|
-        to_io f, Aha::ByteFormat
-      end
-    end
-
-    def self.load(path)
-      File.open(path, "rb") do |f|
-        return self.from_io f, Aha::ByteFormat
-      end
     end
 
     def substr?(str) : Bool

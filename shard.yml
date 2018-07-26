@@ -9,5 +9,7 @@ crystal: 0.23.1
 dependencies:
   sub_hash:
     github: chenkovsky/sub_hash
+  super_io:
+    github: chenkovsky/super_io
 
 license: MIT

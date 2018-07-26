@@ -2,6 +2,8 @@ require "./edit_distance"
 
 module Aha
   class SymSpell
+    SuperIO.save_load
+
     # 对于每个字符串，前面的prefix_len长度的，进行max_edit_distance次delete操作后
     # 所有的子串的hash为key。
     # 查询的字符串的至多max_edit_distance编辑距离的字符串一定可以在hash表中找到。
@@ -128,7 +130,7 @@ module Aha
 
       strings = Array(String).new(string_to_id.size, "")
       string_to_id.each { |k, id| strings[id] = k }
-      Aha.string_array_to_io strings, io, format
+      SuperIO.to_io strings, io, format
       @words.size.to_io io, format
       @words.each { |k, _| string_to_id[k].to_io io, format }
       @words.each { |_, v| v.to_io io, format }
@@ -144,7 +146,7 @@ module Aha
       prefix_length = Int32.from_io io, format
       compact_mask = UInt32.from_io io, format
       max_length = Int32.from_io io, format
-      strings : Array(String) = Aha.string_array_from_io io, format
+      strings : Array(String) = SuperIO.from_io Array(String), io, format
       word_num = Int32.from_io io, format
       words = Hash.zip((0...word_num).map { |_| strings[Int32.from_io(io, format)] }, (0...word_num).map { |_| Int32.from_io(io, format) })
       delete_num = Int32.from_io io, format
@@ -191,18 +193,6 @@ module Aha
       end
       spell.commit_staged(staging)
       return spell
-    end
-
-    def save(path)
-      File.open(path, "wb") do |f|
-        to_io f, Aha::ByteFormat
-      end
-    end
-
-    def self.load(path)
-      File.open(path, "rb") do |f|
-        return SymSpell.from_io f, Aha::ByteFormat
-      end
     end
 
     protected def initialize(@max_edit_distance, @prefix_length, @compact_mask, @max_length, @deletes, @words)

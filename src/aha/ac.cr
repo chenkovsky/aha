@@ -1,5 +1,6 @@
 require "./matcher"
 require "bit_array"
+require "super_io"
 
 module Aha
   # 如果找不到子节点，每次都去fail节点查看有没有相对应的子节点。
@@ -9,6 +10,7 @@ module Aha
 
   class ACX(T)
     include Aha::MatchString
+    SuperIO.save_load
 
     struct OutNode(T)
       @next : T
@@ -182,18 +184,6 @@ module Aha
         fetch(idx, nid) do |hit|
           yield hit
         end
-      end
-    end
-
-    def save(path)
-      File.open(path, "wb") do |f|
-        to_io f, Aha::ByteFormat
-      end
-    end
-
-    def self.load(path)
-      File.open(path, "rb") do |f|
-        return self.from_io f, Aha::ByteFormat
       end
     end
 

@@ -1,8 +1,12 @@
+require "super_io"
+
 module Aha
   alias Cedar = CedarX(Int32)
   alias CedarBig = CedarX(Int64)
 
   class CedarX(T)
+    SuperIO.save_load
+
     def self.value_limit
       T::MAX
     end
@@ -160,10 +164,10 @@ module Aha
     end
 
     def to_io(io : IO, format : IO::ByteFormat)
-      Aha.ptr_to_io @array, @array_size, Node(T), io, format
-      Aha.ptr_to_io @blocks, (@array_size >> 8), Block(T), io, format
+      SuperIO.ptr_to_io @array, @array_size, io, format
+      SuperIO.ptr_to_io @blocks, (@array_size >> 8), io, format
       @reject.each { |r| r.to_io io, format }
-      Aha.ptr_to_io @leafs, (@key_num), T, io, format
+      SuperIO.ptr_to_io @leafs, (@key_num), io, format
       @bheadF.to_io io, format
       @bheadC.to_io io, format
       @bheadO.to_io io, format
@@ -174,12 +178,12 @@ module Aha
 
     def self.from_io(io : IO, format : IO::ByteFormat) : self
       c = Cedar.new
-      c.array, array_size, capacity = Aha.ptr_from_io Node(T), io, format, Math.pw2ceil
+      c.array, array_size, capacity = SuperIO.ptr_from_io Pointer(Node(T)), io, format
       c.array_size = T.new(array_size)
       c.capacity = T.new(capacity)
-      c.blocks, _, _ = Aha.ptr_from_io Block(T), io, format, Math.pw2ceil
+      c.blocks, _, _ = SuperIO.ptr_from_io Pointer(Block(T)), io, format
       c.reject = StaticArray(Int32, 257).new { |i| Int32.from_io io, format }
-      c.leafs, key_num, key_capacity = Aha.ptr_from_io T, io, format, Math.pw2ceil
+      c.leafs, key_num, key_capacity = SuperIO.ptr_from_io Pointer(T), io, format
       c.key_num = T.new(key_num)
       c.key_capacity = T.new(key_capacity)
       c.bheadF = T.from_io io, format
@@ -943,18 +947,6 @@ module Aha
           sibling_ = sibling stack[-1]
         end
         stack[-1] = sibling_.id
-      end
-    end
-
-    def save(path)
-      File.open(path, "wb") do |f|
-        to_io f, Aha::ByteFormat
-      end
-    end
-
-    def self.load(path)
-      File.open(path, "rb") do |f|
-        return self.from_io f, Aha::ByteFormat
       end
     end
 

@@ -1,7 +1,7 @@
 module Aha
   # an open address hash table
   class ArrayHash(N) # N is the byte num of value
-
+    SuperIO.save_load
     include Enumerable({Bytes, Bytes})
     alias Slot = UInt8*
 
@@ -296,18 +296,6 @@ module Aha
           s += N
           yield({key, Bytes.new(val, N)})
         end
-      end
-    end
-
-    def save(path)
-      File.open(path, "wb") do |f|
-        to_io f, Aha::ByteFormat
-      end
-    end
-
-    def self.load(path)
-      File.open(path, "rb") do |f|
-        return self.from_io f, Aha::ByteFormat
       end
     end
   end

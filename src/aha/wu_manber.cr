@@ -1,24 +1,17 @@
 require "sub_hash"
 require "./matcher"
+require "super_io"
 
 struct SubHash
-  def to_io(io, format, include_cache = false)
+  def to_io(io, format)
     @modulo.to_io io, format
     @base.to_io io, format
-    if include_cache
-      Aha.array_to_io @power_cache, UInt64, io, format
-    end
   end
 
-  def self.from_io(io, format, include_cache = false)
+  def self.from_io(io, format)
     modulo = UInt64.from_io io, format
     base = UInt64.from_io io, format
-    if include_cache
-      power_cache = Aha.array_from_io UInt64, io, format
-      return SubHash.new(base, modulo, power_cache)
-    else
-      return SubHash.new(base, modulo)
-    end
+    return SubHash.new(base, modulo)
   end
 
   def initialize(@base, @modulo, @power_cache)
@@ -30,6 +23,7 @@ end
 module Aha
   class WuManber
     include Aha::MatchString
+    SuperIO.save_load
     @[Flags]
     enum CharSet
       Alphabet
@@ -91,7 +85,7 @@ module Aha
 
     def to_io(io, format)
       @hasher.to_io io, format
-      Aha.array_to_io @alphabet, Alphabet, io, format
+      SuperIO.to_io @alphabet, io, format
       @patterns.size.to_io io, format
       @patterns.each do |p|
         p.size.to_io io, format
@@ -101,19 +95,19 @@ module Aha
       @min_len.to_io io, format
       @size_of_alphabet.to_io io, format
       @bits_in_shift.to_io io, format
-      Aha.array_to_io @shift_table, Int32, io, format
+      SuperIO.to_io @shift_table, io, format
       @pattern_lens.size.to_io io, format
       @pattern_lens.each { |k, _| k.to_io io, format }
-      @pattern_lens.each { |_, v| Aha.array_to_io v, Int32, io, format }
+      @pattern_lens.each { |_, v| SuperIO.to_io v, io, format }
 
       @pattern_maps.size.to_io io, format
       @pattern_maps.each { |k, _| k.to_io io, format }
-      @pattern_maps.each { |_, v| Aha.array_to_io v, Int32, io, format }
+      @pattern_maps.each { |_, v| SuperIO.to_io v, io, format }
     end
 
     def self.from_io(io, format)
       hasher = SubHash.from_io io, format
-      alphabet = Aha.array_from_io Alphabet, io, format
+      alphabet = SuperIO.from_io Array(Alphabet), io, format
       patterns_size = Int32.from_io io, format
       patterns = (0...patterns_size).map do |_|
         pat_size = Int32.from_io io, format
@@ -125,15 +119,15 @@ module Aha
       min_len = Int32.from_io io, format
       size_of_alphabet = Int32.from_io io, format
       bits_in_shift = Int32.from_io io, format
-      shift_table = Aha.array_from_io Int32, io, format
+      shift_table = SuperIO.from_io Array(Int32), io, format
 
       pattern_len_size = Int32.from_io io, format
       ks = (0...pattern_len_size).map { |_| Int32.from_io io, format }
-      vs = (0...pattern_len_size).map { |_| Aha.array_from_io Int32, io, format }
+      vs = (0...pattern_len_size).map { |_| SuperIO.from_io Array(Int32), io, format }
       pattern_lens = Hash(Int32, Array(Int32)).zip(ks, vs)
       pattern_map_size = Int32.from_io io, format
       ks2 = (0...pattern_map_size).map { |_| UInt32.from_io io, format }
-      vs2 = (0...pattern_map_size).map { |_| Aha.array_from_io Int32, io, format }
+      vs2 = (0...pattern_map_size).map { |_| SuperIO.from_io Array(Int32), io, format }
       pattern_maps = Hash(UInt32, Array(Int32)).zip(ks2, vs2)
       return WuManber.new(hasher, alphabet, patterns, b, min_len, size_of_alphabet, shift_table, pattern_lens, pattern_maps, bits_in_shift)
     end
@@ -222,18 +216,6 @@ module Aha
           end
         end
         ix += 1
-      end
-    end
-
-    def save(path)
-      File.open(path, "wb") do |f|
-        to_io f, Aha::ByteFormat
-      end
-    end
-
-    def self.load(path)
-      File.open(path, "rb") do |f|
-        return self.from_io f, Aha::ByteFormat
       end
     end
   end

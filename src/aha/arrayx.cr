@@ -1,3 +1,5 @@
+require "super_io"
+
 module Aha
   class ArrayX(T)
     @size : Int64
@@ -29,14 +31,14 @@ module Aha
     end
 
     def self.from_io(io : IO, format : IO::ByteFormat) : self
-      ptr, size, capacity = Aha.ptr_from_io T, io, format, Math.pw2ceil
+      ptr, size, capacity = SuperIO.ptr_from_io Pointer(T), io, format
       self.new(capacity, ptr, size)
     end
 
     def to_io(io : IO, format : IO::ByteFormat)
       @size.to_io io, format
       (0...@size).each do |i|
-        Aha.to_io (@ptr + i).value, T, io, format
+        SuperIO.to_io (@ptr + i), io, format
       end
     end
   end
