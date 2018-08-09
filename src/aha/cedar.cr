@@ -1091,19 +1091,16 @@ module Aha
 
     def match_longest(s : Slice(Char), ignore_case : Bool = false, sep : BitArray | Array(Char) | Nil = nil, &block)
       offset = 0
-      while s.size > 0
+      while offset < s.size
         unless sep.nil?
-          offset2 = 0
-          while offset2 < s.size && is_sep?(s[offset2], sep)
-            offset2 += 1
+          while offset < s.size && is_sep?(s[offset], sep)
+            offset += 1
           end
-          offset += offset2
-          s += offset2 # 直到前面是sep 或者开头
         end
         last_vk, last_char_num = 0, 0
-        prefix(s, ignore_case, -1) do |vk, char_num|
+        prefix(s + offset, ignore_case, -1) do |vk, char_num|
           unless sep.nil?
-            next unless char_num == s.size || is_sep?(s[char_num], sep)
+            next unless char_num + offset == s.size || is_sep?(s[char_num + offset], sep)
           end
           if char_num > last_char_num # 涉及到大小写不同，且大小写ignore了的情况，优先返回完全匹配
             last_vk, last_char_num = vk, char_num
@@ -1111,21 +1108,16 @@ module Aha
         end
         if last_char_num == 0
           # 没有匹配到, 向前一个字符
-          s += 1
           offset += 1
           unless sep.nil?
             # 跳过所有的非分隔字符。
-            offset2 = 0
-            while offset2 < s.size && !is_sep?(s[offset2], sep)
-              offset2 += 1
+            while offset < s.size && !is_sep?(s[offset], sep)
+              offset += 1
             end
-            offset += offset2
-            s += offset2
           end
         else
           # 匹配到了最长的，向前该字符数
           yield Hit.new(offset, offset + last_char_num, last_vk.to_i32)
-          s += last_char_num
           offset += last_char_num
         end
       end
@@ -1148,20 +1140,17 @@ module Aha
     def gsub(s : Slice(Char), ignore_case : Bool = false, sep : BitArray | Array(Char) | Nil = nil, &block)
       String.build do |sb|
         offset = 0
-        while s.size > 0
+        while offset < s.size
           unless sep.nil?
-            offset2 = 0
-            while offset2 < s.size && is_sep?(s[offset2], sep)
-              sb << s[offset2]
-              offset2 += 1
+            while offset < s.size && is_sep?(s[offset], sep)
+              sb << s[offset]
+              offset += 1
             end
-            offset += offset2
-            s += offset2 # 直到前面是sep 或者开头
           end
           last_vk, last_char_num = 0, 0
-          prefix(s, ignore_case, -1) do |vk, char_num|
+          prefix(s + offset, ignore_case, -1) do |vk, char_num|
             unless sep.nil?
-              next unless char_num == s.size || is_sep?(s[char_num], sep)
+              next unless char_num + offset == s.size || is_sep?(s[char_num + offset], sep)
             end
             if char_num > last_char_num # 涉及到大小写不同，且大小写ignore了的情况，优先返回完全匹配
               last_vk, last_char_num = vk, char_num
@@ -1169,25 +1158,20 @@ module Aha
           end
           if last_char_num == 0
             # 没有匹配到, 向前一个字符
-            sb << s[0]
-            s += 1
+            sb << s[offset]
             offset += 1
 
             unless sep.nil?
               # 跳过所有的非分隔字符。
-              offset2 = 0
-              while offset2 < s.size && !is_sep?(s[offset2], sep)
-                sb << s[offset2]
-                offset2 += 1
+              while offset < s.size && !is_sep?(s[offset], sep)
+                sb << s[offset]
+                offset += 1
               end
-              offset += offset2
-              s += offset2
             end
           else
             # 匹配到了最长的，向前该字符数
             ret = yield Hit.new(offset, offset + last_char_num, last_vk.to_i32)
             sb << ret
-            s += last_char_num
             offset += last_char_num
           end
         end
