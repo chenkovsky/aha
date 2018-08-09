@@ -9,8 +9,8 @@ module Aha
     def initialize(@start, @end, @value)
     end
   end
-  module MatchString
 
+  module MatchString
     private def char_map(seq)
       char_of_byte = Array(Int32).new(seq.bytesize)
       bytes = Array(UInt8).new(seq.bytesize)
@@ -22,17 +22,18 @@ module Aha
       end
       return char_of_byte, bytes
     end
+
     def match(seq : String, &block)
       char_of_byte, bytes = char_map(seq)
       match(seq.bytes) do |hit|
-        yield Hit.new(char_of_byte[hit.start], char_of_byte[hit.end-1] + 1, hit.value)
+        yield Hit.new(char_of_byte[hit.start], char_of_byte[hit.end - 1] + 1, hit.value)
       end
     end
 
     def match(seq : String, sep : BitArray, &block)
       char_of_byte, bytes = char_map(seq)
       match(seq.bytes, sep) do |hit|
-        yield Hit.new(char_of_byte[hit.start], char_of_byte[hit.end-1] + 1, hit.value)
+        yield Hit.new(char_of_byte[hit.start], char_of_byte[hit.end - 1] + 1, hit.value)
       end
     end
   end

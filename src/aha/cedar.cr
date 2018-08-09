@@ -1066,5 +1066,132 @@ module Aha
         new_queue.clear
       end
     end
+
+    private def is_sep?(chr : Char, sep : BitArray)
+      chr.ord < sep.size && sep[chr.ord]
+    end
+
+    private def is_sep?(chr : Char, sep : Array(Char) | Slice(Char))
+      sep.includes? chr
+    end
+
+    def match_longest(s : String, ignore_case : Bool = false, sep : BitArray | Array(Char) | Nil = nil)
+      # 返回所有最长匹配
+      match_longest s.chars, ignore_case, sep do |m|
+        yield m
+      end
+    end
+
+    def match_longest(s : Array(Char), ignore_case : Bool = false, sep : BitArray | Array(Char) | Nil = nil)
+      # 返回所有最长匹配
+      match_longest Slice(Char).new(s.to_unsafe, s.size, read_only: true), ignore_case, sep do |m|
+        yield m
+      end
+    end
+
+    def match_longest(s : Slice(Char), ignore_case : Bool = false, sep : BitArray | Array(Char) | Nil = nil, &block)
+      offset = 0
+      while s.size > 0
+        unless sep.nil?
+          offset2 = 0
+          while offset2 < s.size && is_sep?(s[offset2], sep)
+            offset2 += 1
+          end
+          offset += offset2
+          s += offset2 # 直到前面是sep 或者开头
+        end
+        last_vk, last_char_num = 0, 0
+        prefix(s, ignore_case, -1) do |vk, char_num|
+          unless sep.nil?
+            next unless char_num == s.size || is_sep?(s[char_num], sep)
+          end
+          if char_num > last_char_num # 涉及到大小写不同，且大小写ignore了的情况，优先返回完全匹配
+            last_vk, last_char_num = vk, char_num
+          end
+        end
+        if last_char_num == 0
+          # 没有匹配到, 向前一个字符
+          s += 1
+          offset += 1
+          unless sep.nil?
+            # 跳过所有的非分隔字符。
+            offset2 = 0
+            while offset2 < s.size && !is_sep?(s[offset2], sep)
+              offset2 += 1
+            end
+            offset += offset2
+            s += offset2
+          end
+        else
+          # 匹配到了最长的，向前该字符数
+          yield Hit.new(offset, offset + last_char_num, last_vk.to_i32)
+          s += last_char_num
+          offset += last_char_num
+        end
+      end
+    end
+
+    def gsub(s : String, ignore_case : Bool = false, sep : BitArray | Array(Char) | Nil = nil, &block)
+      # 返回所有最长匹配
+      gsub s.chars, ignore_case, sep do |m|
+        yield m
+      end
+    end
+
+    def gsub(s : Array(Char), ignore_case : Bool = false, sep : BitArray | Array(Char) | Nil = nil, &block)
+      # 返回所有最长匹配
+      gsub Slice(Char).new(s.to_unsafe, s.size, read_only: true), ignore_case, sep do |m|
+        yield m
+      end
+    end
+
+    def gsub(s : Slice(Char), ignore_case : Bool = false, sep : BitArray | Array(Char) | Nil = nil, &block)
+      String.build do |sb|
+        offset = 0
+        while s.size > 0
+          unless sep.nil?
+            offset2 = 0
+            while offset2 < s.size && is_sep?(s[offset2], sep)
+              sb << s[offset2]
+              offset2 += 1
+            end
+            offset += offset2
+            s += offset2 # 直到前面是sep 或者开头
+          end
+          last_vk, last_char_num = 0, 0
+          prefix(s, ignore_case, -1) do |vk, char_num|
+            unless sep.nil?
+              next unless char_num == s.size || is_sep?(s[char_num], sep)
+            end
+            if char_num > last_char_num # 涉及到大小写不同，且大小写ignore了的情况，优先返回完全匹配
+              last_vk, last_char_num = vk, char_num
+            end
+          end
+          if last_char_num == 0
+            # 没有匹配到, 向前一个字符
+            sb << s[0]
+            s += 1
+            offset += 1
+
+            unless sep.nil?
+              # 跳过所有的非分隔字符。
+              offset2 = 0
+              while offset2 < s.size && !is_sep?(s[offset2], sep)
+                sb << s[offset2]
+                offset2 += 1
+              end
+              offset += offset2
+              s += offset2
+            end
+          else
+            # 匹配到了最长的，向前该字符数
+            ret = yield Hit.new(offset, offset + last_char_num, last_vk.to_i32)
+            sb << ret
+            s += last_char_num
+            offset += last_char_num
+          end
+        end
+      end
+    end
   end
 end
