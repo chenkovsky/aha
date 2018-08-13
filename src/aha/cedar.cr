@@ -1146,6 +1146,7 @@ module Aha
               sb << s[offset]
               offset += 1
             end
+            break if offset >= s.size
           end
           last_vk, last_char_num = 0, 0
           prefix(s + offset, ignore_case, -1) do |vk, char_num|
