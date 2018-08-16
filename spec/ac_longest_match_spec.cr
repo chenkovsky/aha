@@ -1,0 +1,19 @@
+require "./spec_helper"
+
+describe Aha do
+  # TODO: Write tests
+  it "ac" do
+    trie = Aha::Cedar.new
+    ids = %w(Ruby ruby rub).map do |s|
+      trie.insert s
+    end
+    ac = Aha::AC.compile trie
+
+    ans = [{0, 4, "Ruby"}, {8, 11, "rub"}]
+    ms = [] of Tuple(Int32, Int32, String)
+    ac.match_longest("Ruby on rub") do |m|
+      ms << {m.start, m.end, ac[m.value]}
+    end
+    ms.should eq(ans)
+  end
+end

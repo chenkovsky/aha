@@ -113,6 +113,34 @@ module Aha
     protected def initialize(@da, @output, @fails, @key_lens, @del_num = T.new(0))
     end
 
+    # 匹配最长的字符串
+    private def match_longest_(seq : Bytes | Array(UInt8))
+      nid = T.new(0)
+      prev_i, prev_nid = -1, T.new(-1)
+      seq.each_with_index do |b, i|
+        while true
+          nid_ = @da.child nid, b
+          if nid_ >= 0
+            nid = nid_
+            if @da.is_end? nid
+              prev_i, prev_nid = i, nid
+            end
+            break
+          end
+          if prev_i != -1
+            yield prev_i, prev_nid
+            prev_i = -1
+            nid = T.new(0)
+          end
+          break if nid == 0
+          nid = @fails[nid]
+        end
+      end
+      if prev_i != -1
+        yield prev_i, prev_nid
+      end
+    end
+
     private def match_(seq : Bytes | Array(UInt8))
       nid = T.new(0)
       seq.each_with_index do |b, i|
@@ -131,26 +159,26 @@ module Aha
       end
     end
 
-    private def match_(seq : String, char_of_byte : Array(Int32))
-      nid = 0
-      seq.each_char_with_index do |chr, i|
-        chr.each_byte do |b|
-          char_of_byte << i
-          while true
-            nid_ = @da.child nid, b
-            if nid_ >= 0
-              nid = nid_
-              if @da.is_end? nid
-                yield (char_of_byte.size - 1), nid
-              end
-              break
-            end
-            break if nid == 0
-            nid = @fails[nid]
-          end
-        end
-      end
-    end
+    # private def match_(seq : String, char_of_byte : Array(Int32))
+    #   nid = 0
+    #   seq.each_char_with_index do |chr, i|
+    #     chr.each_byte do |b|
+    #       char_of_byte << i
+    #       while true
+    #         nid_ = @da.child nid, b
+    #         if nid_ >= 0
+    #           nid = nid_
+    #           if @da.is_end? nid
+    #             yield (char_of_byte.size - 1), nid
+    #           end
+    #           break
+    #         end
+    #         break if nid == 0
+    #         nid = @fails[nid]
+    #       end
+    #     end
+    #   end
+    # end
 
     private KEY_LEN_MASK = ~(1 << 31)
     private DELETE_MASK  = (1 << 31)
@@ -162,6 +190,22 @@ module Aha
     def delete(kid : T)
       @del_num += 1 if (@key_lens[kid] & DELETE_MASK) == 0
       @key_lens[kid] ||= DELETE_MASK
+    end
+
+    private def fetch_one(idx, nid)
+      e = Aha.pointer @output, nid
+      while e.value.value >= 0
+        val = e.value.value
+        if @key_lens[val] < KEY_LEN_MASK
+          len = @key_lens[val] & (KEY_LEN_MASK)
+          start_offset = idx - len + 1
+          end_offset = idx + 1
+          yield Hit.new(start_offset, end_offset, val.to_i32)
+          break
+        end
+        break unless e.value.next >= 0
+        e = Aha.pointer(@output, e.value.next)
+      end
     end
 
     private def fetch(idx, nid)
@@ -184,6 +228,21 @@ module Aha
         fetch(idx, nid) do |hit|
           yield hit
         end
+      end
+    end
+
+    def match_longest(seq : Bytes | Array(UInt8), &block)
+      match_longest_ seq do |idx, nid|
+        fetch_one(idx, nid) do |hit|
+          yield hit
+        end
+      end
+    end
+
+    def match_longest(seq : String, &block)
+      char_of_byte, bytes = char_map(seq)
+      match_longest(seq.bytes) do |hit|
+        yield Hit.new(char_of_byte[hit.start], char_of_byte[hit.end - 1] + 1, hit.value)
       end
     end
 
