@@ -114,7 +114,7 @@ module Aha
     end
 
     # 匹配最长的字符串
-    private def match_longest_(seq : Bytes | Array(UInt8))
+    private def match_longest_(seq : Bytes | Array(UInt8), intersectable : Bool = false)
       nid = T.new(0)
       prev_i, prev_nid = -1, T.new(-1)
       seq.each_with_index do |b, i|
@@ -130,7 +130,7 @@ module Aha
           if prev_i != -1
             yield prev_i, prev_nid
             prev_i = -1
-            nid = T.new(0)
+            nid = T.new(0) unless intersectable
           end
           break if nid == 0
           nid = @fails[nid]
@@ -231,17 +231,17 @@ module Aha
       end
     end
 
-    def match_longest(seq : Bytes | Array(UInt8), &block)
-      match_longest_ seq do |idx, nid|
+    def match_longest(seq : Bytes | Array(UInt8), intersectable = false, &block)
+      match_longest_ seq, intersectable do |idx, nid|
         fetch_one(idx, nid) do |hit|
           yield hit
         end
       end
     end
 
-    def match_longest(seq : String, &block)
+    def match_longest(seq : String, intersectable = false, &block)
       char_of_byte, bytes = char_map(seq)
-      match_longest(seq.bytes) do |hit|
+      match_longest(seq.bytes, intersectable) do |hit|
         yield Hit.new(char_of_byte[hit.start], char_of_byte[hit.end - 1] + 1, hit.value)
       end
     end
