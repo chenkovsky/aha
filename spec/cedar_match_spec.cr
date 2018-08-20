@@ -79,4 +79,18 @@ describe Aha do
     end
     s.should eq("Crystal rRuby on rubyx crystal")
   end
+
+  it "cedar reverse match" do
+    trie = Aha::Cedar.new
+    ids = %w(s' S' S'').map do |s|
+      trie.insert s
+    end
+
+    ans = [{"S'", 2}, {"S''", 3}]
+    ms = [] of Tuple(String, Int32)
+    trie.reverse_suffix("She''S".chars, false) do |vk, char_num|
+      ms << ({trie[vk], char_num})
+    end
+    ms.sort.should eq(ans)
+  end
 end

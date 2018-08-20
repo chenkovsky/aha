@@ -989,13 +989,15 @@ module Aha
     end
 
     {% for name, idx in ["String", "Array(Char)", "Slice(Char)"] %}
-    def prefix(s : {{name.id}}, ignore_case : Bool, limit : Int32 = -1)
+    {% for fname, idx in [:prefix, :reverse_suffix] %}
+    {% unless fname == :reverse_suffix && name == "String" %}
+    def {{fname.id}}(s : {{name.id}}, ignore_case : Bool, limit : Int32 = -1)
       return if limit == 0
       queue = [T.new(0)] # queue of node_id
       new_queue = [] of T
       char_num = 0
       num = 0
-      s.each{{name == "String" ? "_char".id : "".id}} do |chr|
+      s.{{fname == :reverse_suffix ? "reverse_".id : "".id}}each{{name == "String" ? "_char".id : "".id}} do |chr|
         char_num += 1
         other_char = chr
         other_char = chr.uppercase? ? chr.downcase : chr.upcase if ignore_case
@@ -1027,6 +1029,8 @@ module Aha
         new_queue.clear
       end
     end
+    {% end %}
+    {% end %}
     {% end %}
 
     #  bfs 的顺序输出的
