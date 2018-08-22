@@ -141,7 +141,7 @@ module Aha
       end
     end
 
-    private def match_longest_(seq : Array(Char), intersectable : Bool = false)
+    private def match_longest_(seq : Array(Char) | Slice(Char), intersectable : Bool = false)
       nid = T.new(0)
       prev_i, prev_nid = -1, T.new(-1)
       i = 0
@@ -190,7 +190,7 @@ module Aha
       end
     end
 
-    private def match_(seq : Array(Char))
+    private def match_(seq : Array(Char) | Slice(Char))
       nid = T.new(0)
       i = 0
       seq.each do |chr|
@@ -284,7 +284,7 @@ module Aha
       end
     end
 
-    def match(seq : Array(Char), &block)
+    def match(seq : Array(Char) | Slice(Char), &block)
       char_of_byte = char_map(seq)
       match_ seq do |idx, nid|
         fetch(idx, nid) do |hit|
@@ -308,7 +308,7 @@ module Aha
       end
     end
 
-    def match_longest(seq : Array(Char), intersectable = false, &block)
+    def match_longest(seq : Array(Char) | Slice(Char), intersectable = false, &block)
       char_of_byte = char_map(seq)
       match_longest_ seq, intersectable do |idx, nid|
         fetch_one(idx, nid) do |hit|
@@ -338,7 +338,7 @@ module Aha
       end
     end
 
-    def match(seq : Array(Char), sep : BitArray, &block)
+    def match(seq : Array(Char) | Slice(Char), sep : BitArray, &block)
       raise "sep BitArray size > 256 is not supported" if sep.size > 256
       char_of_byte = char_map(seq)
       match_ seq do |idx, nid|
