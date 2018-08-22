@@ -141,6 +141,37 @@ module Aha
       end
     end
 
+    private def match_longest_(seq : Array(Char), intersectable : Bool = false)
+      nid = T.new(0)
+      prev_i, prev_nid = -1, T.new(-1)
+      i = 0
+      seq.each do |chr|
+        chr.each_byte do |b|
+          while true
+            nid_ = @da.child nid, b
+            if nid_ >= 0
+              nid = nid_
+              if @da.is_end? nid
+                prev_i, prev_nid = i, nid
+              end
+              break
+            end
+            if prev_i != -1
+              yield prev_i, prev_nid
+              prev_i = -1
+              nid = T.new(0) unless intersectable
+            end
+            break if nid == 0
+            nid = @fails[nid]
+          end
+          i += 1
+        end
+      end
+      if prev_i != -1
+        yield prev_i, prev_nid
+      end
+    end
+
     private def match_(seq : Bytes | Array(UInt8))
       nid = T.new(0)
       seq.each_with_index do |b, i|
@@ -155,6 +186,28 @@ module Aha
           end
           break if nid == 0
           nid = @fails[nid]
+        end
+      end
+    end
+
+    private def match_(seq : Array(Char))
+      nid = T.new(0)
+      i = 0
+      seq.each do |chr|
+        chr.each_byte do |b|
+          while true
+            nid_ = @da.child nid, b
+            if nid_ >= 0
+              nid = nid_
+              if @da.is_end? nid
+                yield i, nid
+              end
+              break
+            end
+            break if nid == 0
+            nid = @fails[nid]
+          end
+          i += 1
         end
       end
     end
@@ -231,6 +284,15 @@ module Aha
       end
     end
 
+    def match(seq : Array(Char), &block)
+      char_of_byte = char_map(seq)
+      match_ seq do |idx, nid|
+        fetch(idx, nid) do |hit|
+          yield Hit.new(char_of_byte[hit.start], char_of_byte[hit.end - 1] + 1, hit.value)
+        end
+      end
+    end
+
     def match_longest(seq : Bytes | Array(UInt8), intersectable = false, &block)
       match_longest_ seq, intersectable do |idx, nid|
         fetch_one(idx, nid) do |hit|
@@ -240,9 +302,18 @@ module Aha
     end
 
     def match_longest(seq : String, intersectable = false, &block)
-      char_of_byte, bytes = char_map(seq)
+      char_of_byte = char_map(seq)
       match_longest(seq.bytes, intersectable) do |hit|
         yield Hit.new(char_of_byte[hit.start], char_of_byte[hit.end - 1] + 1, hit.value)
+      end
+    end
+
+    def match_longest(seq : Array(Char), intersectable = false, &block)
+      char_of_byte = char_map(seq)
+      match_longest_ seq, intersectable do |idx, nid|
+        fetch_one(idx, nid) do |hit|
+          yield Hit.new(char_of_byte[hit.start], char_of_byte[hit.end - 1] + 1, hit.value)
+        end
       end
     end
 
@@ -263,6 +334,30 @@ module Aha
             end
           end
           yield hit
+        end
+      end
+    end
+
+    def match(seq : Array(Char), sep : BitArray, &block)
+      raise "sep BitArray size > 256 is not supported" if sep.size > 256
+      char_of_byte = char_map(seq)
+      match_ seq do |idx, nid|
+        chr_idx = char_of_byte[idx]
+        if chr_idx + 1 < seq.size
+          chr = seq[chr_idx + 1]
+          if chr.ord < sep.size && !sep[chr.ord]
+            next
+          end
+        end
+        fetch(idx, nid) do |hit|
+          if hit.start > 0
+            chr_idx = char_of_byte[hit.start]
+            chr = seq[chr_idx - 1]
+            if chr.ord < sep.size && !sep[chr.ord]
+              next
+            end
+          end
+          yield Hit.new(char_of_byte[hit.start], char_of_byte[hit.end - 1] + 1, hit.value)
         end
       end
     end

@@ -31,4 +31,34 @@ describe Aha do
     end
     ms.should eq(ans)
   end
+
+  it "not intersectable char array" do
+    trie = Aha::Cedar.new
+    ids = %w(Ruby ruby rub).map do |s|
+      trie.insert s
+    end
+    ac = Aha::AC.compile trie
+
+    ans = [{0, 4, "Ruby"}, {8, 11, "rub"}]
+    ms = [] of Tuple(Int32, Int32, String)
+    ac.match_longest("Ruby on rub".chars) do |m|
+      ms << {m.start, m.end, ac[m.value]}
+    end
+    ms.should eq(ans)
+  end
+
+  it "intersectable char array" do
+    trie = Aha::Cedar.new
+    ids = ["Ruby", "ruby", "uby "].map do |s|
+      trie.insert s
+    end
+    ac = Aha::AC.compile trie
+
+    ans = [{0, 4, "ruby"}, {1, 5, "uby "}]
+    ms = [] of Tuple(Int32, Int32, String)
+    ac.match_longest("ruby ".chars, true) do |m|
+      ms << {m.start, m.end, ac[m.value]}
+    end
+    ms.should eq(ans)
+  end
 end
