@@ -21,7 +21,7 @@ module Aha
       return char_of_byte
     end
 
-    private def char_map(seq : Array(Char))
+    private def char_map(seq : Array(Char) | Slice(Char))
       char_of_byte = Array(Int32).new(seq.size)
       seq.each_with_index do |chr, chr_idx|
         chr.each_byte do |b|
