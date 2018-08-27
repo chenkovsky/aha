@@ -38,7 +38,7 @@ module Aha
     @key_lens : ArrayX(UInt32)
     @del_num : T
 
-    delegate :prefix, to: @da
+    delegate :prefix, :reverse_suffix, to: @da
     delegate :[], to: @da
     delegate :[]?, to: @da
 
