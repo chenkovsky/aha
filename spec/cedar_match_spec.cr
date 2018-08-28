@@ -93,4 +93,17 @@ describe Aha do
     end
     ms.sort.should eq(ans)
   end
+
+  it "cedar bytes reverse match" do
+    trie = Aha::Cedar.new
+    ids = %w(s' S' S'').map do |s|
+      trie.insert s
+    end
+    ans = [{"S'", 2}, {"S''", 3}]
+    ms = [] of Tuple(String, Int32)
+    trie.reverse_suffix("She''S".bytes) do |vk, byte_num|
+      ms << ({trie[vk], byte_num})
+    end
+    ms.sort.should eq(ans)
+  end
 end

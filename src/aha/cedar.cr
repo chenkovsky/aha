@@ -833,34 +833,27 @@ module Aha
       return ret
     end
 
+    {% for names, idx in [{:prefix, :each}, {:reverse_suffix, :reverse_each}] %}
     # 返回key的所有前缀
     # yield value
-    def prefix_match(key : Bytes | Array(UInt8), num : T)
+    def {{names[0].id}}(key : Bytes | Array(UInt8), num : Int32 = -1)
+      return if num == 0
       from = 0
-      key.each_with_index do |k, i|
+      len = 0
+      key.{{names[1].id}} do |k|
+        len += 1
         to = jump(k, from)
         break if to < 0
         vk = value to
         if vk >= 0
-          yield vk
+          yield ({vk, len})
           num -= 1
           break if num == 0
         end
         from = to
       end
     end
-
-    # 返回以 key 为前缀的字符串
-    def prefix_predict(key : Bytes | Array(UInt8), num : T)
-      root = jump key, 0
-      return if root < 0
-      from = self.begin root
-      while true
-        return if from < 0
-        yield value from
-        from = self.next from, root
-      end
-    end
+    {% end %}
 
     # 返回终止节点
     private def begin(from : T) : T

@@ -315,4 +315,17 @@ TXT
     end
     arr.should eq(["polite"])
   end
+
+  it "cedar bytes prefix match" do
+    trie = Aha::Cedar.new
+    ids = %w(He Hello).map do |s|
+      trie.insert s
+    end
+    ans = [{"He", 2}, {"Hello", 5}]
+    ms = [] of Tuple(String, Int32)
+    trie.prefix("Hello World".bytes) do |vk, byte_num|
+      ms << ({trie[vk], byte_num})
+    end
+    ms.sort.should eq(ans)
+  end
 end
